@@ -3,10 +3,13 @@ import sys
 import bmesh
 import mathutils
 from mathutils import geometry
+import os
 
 from CSXCAD import CSXCAD
 from openEMS import openEMS
 from openEMS.physical_constants import *
+
+import tempfile
 
 def extract_lines_xyz(lines):
     mesh = lines.data
@@ -186,6 +189,131 @@ class IntuitionRF_OT_add_default_lines(bpy.types.Operator):
         context.scene.intuitionRF_smooth_max_res = wavelength_over_2 / 20
         return {"FINISHED"}
     
+class IntuitionRF_OT_preview_meshing(bpy.types.Operator):
+    """Preview SIM from current configuration in CSXCAD"""
+    bl_idname = "intuitionrf.preview_meshing"
+    bl_label = "Preview sim in CSXCAD"
+
+    def execute(self, context):
+        FDTD = openEMS(NrTS=1, EndCriteria=1e-4)
+
+
+        CSX = CSXCAD.ContinuousStructure()
+        CSX = meshlines_from_scene(CSX, context)
+        FDTD.SetCSX(CSX)
+        FDTD.SetGaussExcite( context.scene.center_freq, context.scene.cutoff_freq)
+        FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'PML_8'] )
+
+        FDTD, CSX = objects_from_scene(FDTD, CSX, context)
+
+        # create temporary dir
+        tmp_dir = tempfile.mkdtemp()
+        CSX_file = f"{tmp_dir}/meshing.xml"
+        CSX.Write2XML(CSX_file)
+
+        from CSXCAD import AppCSXCAD_BIN
+        os.system(AppCSXCAD_BIN + ' "{}"'.format(CSX_file))
+
+        # dry run the SIM
+        FDTD.Run(sim_path="/tmp/sim", cleanup=False, setup_only=True, debug_material=True, debug_pec=True)
+
+        return {"FINISHED"}
+
+def start_stop_from_BB(bound_box):
+    for vert in bound_box:
+        print(vert)
+    min_x = min(vert[0] for vert in bound_box)
+    min_y = min(vert[1] for vert in bound_box)
+    min_z = min(vert[2] for vert in bound_box)
+    max_x = max(vert[0] for vert in bound_box)
+    max_y = max(vert[1] for vert in bound_box)
+    max_z = max(vert[2] for vert in bound_box)
+
+    return [min_x, min_y, min_z], [max_x, max_y, max_z]
+
+def objects_from_scene(FDTD, CSX, context):
+    """Exports relevant objects into the continous structure """
+    objects_collection = context.scene.intuitionRF_objects.objects
+    # create temporary dir
+    tmp_dir = tempfile.mkdtemp()
+
+    for o in objects_collection:
+        # export metals
+        if o.intuitionRF_properties.object_type == "metal":
+            filename = f"{tmp_dir}/{o.name}.stl"
+            filename = "/tmp/test.stl"
+            bpy.ops.object.select_all(action='DESELECT')
+            o.select_set(True)
+            bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+
+            # immediately reimport mesh as a CSX metal part
+            metal = CSX.AddMetal(o.name)
+            # import STL file
+            #
+            start, stop = start_stop_from_BB(o.bound_box)
+            #metal.AddBox(start, stop)
+            reader = metal.AddPolyhedronReader('/tmp/test.stl')
+            reader.SetFileType(1) # 1 STL, 2 PLY 
+            reader.ReadFile()
+            reader.Update()
+            reader.SetPrimitiveUsed(True)
+            #FDTD.AddEdges2Grid(dirs='all', properties=metal, metal_edge_res=.0004)
+
+            # add a box using cylindrical coordinates
+            #start = [0, 0, -0.01]
+            #stop  = [0, 0,  0.01]
+            #metal.AddCylinder(start, stop, radius=.2)
+
+        if o.intuitionRF_properties.object_type == "dumpbox":
+            print("Found dumpbox")
+            start, stop = start_stop_from_BB(o.bound_box)
+            # TODO make this cacheable
+            filename_prefix = "/tmp/Et_"
+            dumpbox = CSX.AddDump(filename_prefix)
+            dumpbox.SetDumpType(int(o.intuitionRF_properties.dump_type))
+            dumpbox.SetDumpMode(int(o.intuitionRF_properties.dump_mode))
+            dumpbox.AddBox(start, stop)
+    
+
+    for o in objects_collection:
+        if o.intuitionRF_properties.object_type == "port":
+            start, stop = start_stop_from_BB(o.bound_box)
+            impedance = o.intuitionRF_properties.port_impedance
+            port_number = o.intuitionRF_properties.port_number
+            direction = o.intuitionRF_properties.port_direction
+            excite = 1.0 if o.intuitionRF_properties.port_active else 0.0 
+            FDTD.AddLumpedPort(port_number, impedance, 
+                start, stop, direction, excite)
+
+    f0 = 146e6 # center frequency, frequency of interest!
+    lambda0 = int(C0/f0) # wavelength in mm
+    nf2ff = FDTD.CreateNF2FFBox(opt_resolution=[lambda0/15]*3)
+
+
+    return FDTD, CSX
+
+def meshlines_from_scene(CSX, context):
+    lines = context.scene.intuitionRF_lines
+    x, y, z = extract_lines_xyz(lines)
+    
+    mesh = CSX.GetGrid()
+    unit = context.scene.intuitionRF_unit
+    mesh.SetDeltaUnit(unit)
+
+    # put lines in CSXCAD        
+    mesh.AddLine('x', list(x))
+    mesh.AddLine('y', list(y))
+    mesh.AddLine('z', list(z))
+    # smooth as required by user
+    if context.scene.intuitionRF_smooth_mesh:
+        # smooth all directions the same
+        # per grid granularty should be determiner by fixed lines 
+        # (easy to place graphically)
+        mesh.SmoothMeshLines('x', context.scene.intuitionRF_smooth_max_res, context.scene.intuitionRF_smooth_ratio)
+        mesh.SmoothMeshLines('y', context.scene.intuitionRF_smooth_max_res, context.scene.intuitionRF_smooth_ratio)
+        mesh.SmoothMeshLines('z', context.scene.intuitionRF_smooth_max_res, context.scene.intuitionRF_smooth_ratio)        
+    return CSX
+
 class IntuitionRF_OT_add_preview_lines(bpy.types.Operator):
     """ Add openEMS meshing lines preview """
     bl_idname = "intuitionrf.add_preview_lines"
@@ -194,38 +322,10 @@ class IntuitionRF_OT_add_preview_lines(bpy.types.Operator):
     def execute(self, context):
         if context.scene.intuitionRF_previewlines is not None:
             bpy.data.objects.remove(bpy.context.scene.intuitionRF_previewlines, do_unlink=True)
-        
-        lines = context.scene.intuitionRF_lines
-        x, y, z = extract_lines_xyz(lines)
-        
-        FDTD = openEMS(EndCriteria=1e-4)
-        f0 = context.scene.center_freq
-        fc = context.scene.cutoff_freq
-        if context.scene.intuitionRF_excitation_type == "gauss":
-            FDTD.SetGaussExcite(f0, fc)
-        else:
-            FDTD.SetSineExcite(f0)
-        # TODO handle boundary conditions
-        FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'MUR'] )
 
         CSX = CSXCAD.ContinuousStructure()
-        FDTD.SetCSX(CSX)
+        CSX = meshlines_from_scene(CSX, context)
         mesh = CSX.GetGrid()
-        unit = context.scene.intuitionRF_unit
-        mesh.SetDeltaUnit(unit)
-
-        # put lines in CSXCAD        
-        mesh.AddLine('x', list(x))
-        mesh.AddLine('y', list(y))
-        mesh.AddLine('z', list(z))
-        # smooth as required by user
-        if context.scene.intuitionRF_smooth_mesh:
-            # smooth all directions the same
-            # per grid granularty should be determiner by fixed lines 
-            # (easy to place graphically)
-            mesh.SmoothMeshLines('x', context.scene.intuitionRF_smooth_max_res, context.scene.intuitionRF_smooth_ratio)
-            mesh.SmoothMeshLines('y', context.scene.intuitionRF_smooth_max_res, context.scene.intuitionRF_smooth_ratio)
-            mesh.SmoothMeshLines('z', context.scene.intuitionRF_smooth_max_res, context.scene.intuitionRF_smooth_ratio)        
             
         # retrieve lines
         x = mesh.GetLines('x')
@@ -288,6 +388,8 @@ def register():
     bpy.utils.register_class(IntuitionRF_OT_add_default_lines)
     bpy.utils.register_class(IntuitionRF_OT_add_preview_lines)
 
+    bpy.utils.register_class(IntuitionRF_OT_preview_meshing)
+
 def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_add_meshline_x)
     bpy.utils.unregister_class(IntuitionRF_OT_add_meshline_y)    
@@ -297,3 +399,5 @@ def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_add_default_lines)
     bpy.utils.unregister_class(IntuitionRF_OT_add_preview_lines)
     bpy.utils.unregister_class(IntuitionRF_OT_add_wavelength_cube)
+
+    bpy.utils.unregister_class(IntuitionRF_OT_preview_meshing)

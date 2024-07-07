@@ -62,6 +62,8 @@ class IntuitionRFPanel(bpy.types.Panel):
         row.operator("intuitionrf.add_meshline_x")
         row.operator("intuitionrf.add_meshline_y")
         row.operator("intuitionrf.add_meshline_z")
+        row = layout.row()
+        row.operator("intuitionrf.preview_meshing")
 
 def register():
     bpy.utils.register_class(IntuitionRFPanel)

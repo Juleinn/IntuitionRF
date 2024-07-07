@@ -14,7 +14,7 @@ class IntuitionRF_ObjectProperties(bpy.types.PropertyGroup):
         description = 'Select an option', 
         items = [
             ('none', 'None', 'Ignored for computations'),
-            ('PEC', 'PEC', 'perfect electrical conductor'),
+            ('metal', 'metal', 'metal'),
             ('material', 'material (\u03B5,\u03BA)', 'material defined by \u03B5 and \u03BA'),
             ('dumpbox', 'Dump Box', 'Dump box for E or H fields (to be specified)'),
             ('nf2ff', 'NF2FF Box', 'Near Field to Far Field computation box'),
@@ -33,15 +33,41 @@ class IntuitionRF_ObjectProperties(bpy.types.PropertyGroup):
         name = 'Direction',
         description = 'Port Excitation Direction', 
         items = [
-            ('px', '+x', '+x'),
-            ('py', '+y', '+y'),
-            ('pz', '+z', '+z'),
-            ('nx', '-x', '-x'),
-            ('ny', '-y', '-y'),
-            ('nz', '-z', '-z')
+            ('x', 'x', 'x'),
+            ('y', 'y', 'y'),
+            ('z', 'z', 'z')
         ]
     )
     port_active: bpy.props.BoolProperty(name='Active', default=False)
+
+    dump_type: bpy.props.EnumProperty(
+        name = 'Dump Type',
+        description = 'Dump Type', 
+        items = [
+            ("0", "E field/time", "E-field time-domain dump (default)"),
+            ("1", "H field/time", "H-field time-domain dump"),
+            ("2", "Current/time", "electric current time-domain dump"),
+            ("3",  "Current density/time", "total current density (rot(H)) time-domain dump"),
+            ("10", "E field/freq", " E-field frequency-domain dump"),
+            ("11", "H field/freq", " H-field frequency-domain dump"),
+            ("12", "Current/freq", " electric current frequency-domain dump"),
+            ("13", "Current density/freq", " total current density (rot(H)) frequency-domain dump"),
+            ("20", "local SAR/freq", " local SAR frequency-domain dump"),
+            ("21", "1g avg. SAR/freq", " 1g averaging SAR frequency-domain dump"),
+            ("22", "10g avg. SAR/freq", " 10g averaging SAR frequency-domain dump"),
+            ("29", "raw SAR", " raw data needed for SAR calculations (electric field FD, cell volume, conductivity and density)")
+        ]
+    )
+
+    dump_mode: bpy.props.EnumProperty(
+        name = 'Dump Mode',
+        description = 'Dump Mode', 
+        items = [
+            ("0", "no-interpolation", "no-interpolation"),
+            ("1", "node-interpolation", "node-interpolation"),
+            ("2", "cell-interpolation", "cell-interpolation")
+        ]
+    )
 
 # object tab properties panel
 class OBJECT_PT_intuitionRFPanel(bpy.types.Panel):
@@ -79,6 +105,12 @@ class OBJECT_PT_intuitionRFPanel(bpy.types.Panel):
             row.prop(obj.intuitionRF_properties, "port_impedance")    
             row = layout.row()
             row.prop(obj.intuitionRF_properties, "port_direction")       
+
+        if obj.intuitionRF_properties.object_type == "dumpbox":
+            row = layout.row()
+            row.prop(obj.intuitionRF_properties, "dump_type")
+            row = layout.row()
+            row.prop(obj.intuitionRF_properties, "dump_mode")
 
 def register():
     # register object classes

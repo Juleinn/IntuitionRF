@@ -14,10 +14,9 @@ from CSXCAD import CSXCAD
 from openEMS import openEMS
 from openEMS.physical_constants import *
 
-if "bpy" in locals(): #means Blender already started once
+if "meshing" in locals(): #means Blender already started once
     import importlib
     print("reimporting")
-    print(str(meshing))
     importlib.reload(meshing)
     importlib.reload(scene)
     importlib.reload(objects)

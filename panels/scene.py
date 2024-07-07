@@ -63,7 +63,9 @@ class IntuitionRFPanel(bpy.types.Panel):
         row.operator("intuitionrf.add_meshline_y")
         row.operator("intuitionrf.add_meshline_z")
         row = layout.row()
-        row.operator("intuitionrf.preview_meshing")
+        row.operator("intuitionrf.preview_csx")
+        row = layout.row()
+        row.operator("intuitionrf.preview_pec_dump")
 
 def register():
     bpy.utils.register_class(IntuitionRFPanel)
@@ -96,6 +98,7 @@ is 1mm in simulation""",
     bpy.types.Scene.intuitionRF_previewlines = bpy.props.PointerProperty(type=bpy.types.Object, name='preview_lines')
     bpy.types.Scene.intuitionRF_smooth_max_res = bpy.props.FloatProperty(name='Smooth max resolution', default=3)
     bpy.types.Scene.intuitionRF_smooth_ratio = bpy.props.FloatProperty(name='Smooth ratio', default=1.4)
+    bpy.types.Scene.intuitionRF_PEC_dump = bpy.props.PointerProperty(type=bpy.types.Object, name='lines')
 
 def unregister():
     bpy.utils.unregister_class(IntuitionRFPanel)
@@ -110,3 +113,4 @@ def unregister():
     del bpy.types.Scene.intuitionRF_previewlines
     del bpy.types.Scene.intuitionRF_smooth_max_res
     del bpy.types.Scene.intuitionRF_smooth_ratio
+    del bpy.types.Scene.intuitionRF_PEC_dump

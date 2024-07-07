@@ -1,3 +1,4 @@
+import tempfile
 import bpy 
 import sys
 import bmesh
@@ -22,50 +23,49 @@ class IntuitionRFPanel(bpy.types.Panel):
         
         row = layout.row()
         row.prop(scene, "intuitionRF_unit")
-
-        # Big render button
-        layout.label(text="Add simulation domain")
-        row = layout.row()
-        row.scale_x = 1.0
-        row.operator("intuitionrf.add_domain")
-        row = layout.row()
-        row.prop(scene, "intuitionRF_domain")
         
-        layout.label(text="Excitation")
-        row = layout.row()
+        box = layout.box()
+        box.label(text="Excitation")
+        row = box.row()
         row.prop(scene, "intuitionRF_excitation_type")        
-        row = layout.row()
+        row = box.row()
         row.prop(scene, "center_freq")
         if context.scene.intuitionRF_excitation_type == "gauss":
-            row = layout.row()
+            row = box.row()
             row.prop(scene, "cutoff_freq")
-        row = layout.row()
+
+        box = layout.box()
+        row = box.row()
         row.prop(scene, "intuitionRF_objects")
-        row = layout.row()
+        box = layout.box()
+        row = box.row()
         wavelength = 300.0 / context.scene.center_freq
         row.label(text = f"\u03BB = {wavelength:.2}m" )
         row.operator("intuitionrf.add_wavelength_cube")
-        row = layout.row()
-        row = layout.row()
+        row = box.row()
         row.prop(scene, "intuitionRF_lines")
-        row = layout.row()
+        row = box.row()
         row.operator("intuitionrf.add_default_lines")
-        row = layout.row()
+        row = box.row()
         row.prop(scene, "intuitionRF_smooth_mesh")
-        row = layout.row()
+        row = box.row()
         row.prop(scene, "intuitionRF_smooth_ratio")
-        row = layout.row()
+        row = box.row()
         row.prop(scene, "intuitionRF_smooth_max_res")
-        row = layout.row()
+        row = box.row()
         row.operator("intuitionrf.add_preview_lines")
-        row = layout.row()
+        row = box.row()
         row.operator("intuitionrf.add_meshline_x")
         row.operator("intuitionrf.add_meshline_y")
         row.operator("intuitionrf.add_meshline_z")
-        row = layout.row()
+        box = layout.box()
+        row = box.row()
+        row.prop(scene, 'intuitionRF_simdir')
+        row = box.row()
         row.operator("intuitionrf.preview_csx")
-        row = layout.row()
         row.operator("intuitionrf.preview_pec_dump")
+        row = box.row()
+        row.operator("intuitionrf.run_sim")
 
 def register():
     bpy.utils.register_class(IntuitionRFPanel)
@@ -75,7 +75,7 @@ def register():
 """Blender to OpenEMS scaling factor. 
 1e-3 means 1 blender unit (meter)
 is 1mm in simulation""",
-        default=1e-3
+        default=1
     )
     bpy.types.Scene.center_freq = bpy.props.FloatProperty(name='Center Freq (Mhz)', default=868.00)
     bpy.types.Scene.cutoff_freq = bpy.props.FloatProperty(name='Cutoff Freq (Mhz)', default=2*868.00)
@@ -100,6 +100,16 @@ is 1mm in simulation""",
     bpy.types.Scene.intuitionRF_smooth_ratio = bpy.props.FloatProperty(name='Smooth ratio', default=1.4)
     bpy.types.Scene.intuitionRF_PEC_dump = bpy.props.PointerProperty(type=bpy.types.Object, name='lines')
 
+    tmpdir = tempfile.mkdtemp()
+
+    bpy.types.Scene.intuitionRF_simdir = bpy.props.StringProperty(
+        name="Directory",
+        description="Simulation Directory",
+        default=tmpdir,
+        maxlen=1024,
+        subtype='DIR_PATH'
+    )
+
 def unregister():
     bpy.utils.unregister_class(IntuitionRFPanel)
 
@@ -114,3 +124,4 @@ def unregister():
     del bpy.types.Scene.intuitionRF_smooth_max_res
     del bpy.types.Scene.intuitionRF_smooth_ratio
     del bpy.types.Scene.intuitionRF_PEC_dump
+    del bpy.types.Scene.intuitionRF_simdir 

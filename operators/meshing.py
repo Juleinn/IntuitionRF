@@ -206,7 +206,7 @@ class IntuitionRF_OT_preview_CSX(bpy.types.Operator):
         CSX = CSXCAD.ContinuousStructure()
         CSX = meshlines_from_scene(CSX, context)
         FDTD.SetCSX(CSX)
-        FDTD.SetGaussExcite( context.scene.center_freq, context.scene.cutoff_freq)
+        FDTD.SetGaussExcite( context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
         FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'PML_8'] )
 
         FDTD, CSX = objects_from_scene(FDTD, CSX, context)
@@ -232,17 +232,38 @@ class IntuitionRF_OT_preview_PEC_dump(bpy.types.Operator):
         CSX = CSXCAD.ContinuousStructure()
         CSX = meshlines_from_scene(CSX, context)
         FDTD.SetCSX(CSX)
-        FDTD.SetGaussExcite( context.scene.center_freq, context.scene.cutoff_freq)
+        FDTD.SetGaussExcite( context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
         FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'PML_8'] )
 
         FDTD, CSX = objects_from_scene(FDTD, CSX, context)
 
         # dry run the SIM
-        FDTD.Run(sim_path="/tmp/sim", cleanup=False, setup_only=True, debug_material=True, debug_pec=True)
+        FDTD.Run(sim_path=context.scene.intuitionRF_simdir, cleanup=False, setup_only=True, debug_material=True, debug_pec=True)
 
         # now import the meshing lines from the output VTP file
-        PEC_dump_to_scene('/tmp/sim/PEC_dump.vtp', context)
+        PEC_filename = f"{context.scene.intuitionRF_simdir}/PEC_dump.vtp"
+        PEC_dump_to_scene(PEC_filename, context)
 
+        return {"FINISHED"}
+
+class IntuitionRF_OT_run_sim(bpy.types.Operator):
+    """Run the currently defined simulation in OpenEMS"""
+    bl_idname = "intuitionrf.run_sim"
+    bl_label = "Run SIM"
+
+    def execute(self, context):
+        FDTD = openEMS(NrTS=1e5, EndCriteria=1e-4)
+
+        CSX = CSXCAD.ContinuousStructure()
+        CSX = meshlines_from_scene(CSX, context)
+        FDTD.SetCSX(CSX)
+        FDTD.SetGaussExcite( context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
+        FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'PML_8'] )
+
+        FDTD, CSX = objects_from_scene(FDTD, CSX, context)
+
+        FDTD.Run(sim_path=context.scene.intuitionRF_simdir, cleanup=False)
+        
         return {"FINISHED"}
 
 
@@ -320,14 +341,11 @@ def start_stop_from_BB(bound_box):
 def objects_from_scene(FDTD, CSX, context):
     """Exports relevant objects into the continous structure """
     objects_collection = context.scene.intuitionRF_objects.objects
-    # create temporary dir
-    tmp_dir = tempfile.mkdtemp()
 
     for o in objects_collection:
         # export metals
         if o.intuitionRF_properties.object_type == "metal":
-            filename = f"{tmp_dir}/{o.name}.stl"
-            filename = "/tmp/test.stl"
+            filename = f"{context.scene.intuitionRF_simdir}/{o.name}.stl"
             bpy.ops.object.select_all(action='DESELECT')
             o.select_set(True)
             bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
@@ -338,28 +356,50 @@ def objects_from_scene(FDTD, CSX, context):
             #
             start, stop = start_stop_from_BB(o.bound_box)
             #metal.AddBox(start, stop)
-            reader = metal.AddPolyhedronReader('/tmp/test.stl')
+            reader = metal.AddPolyhedronReader(filename)
             reader.SetFileType(1) # 1 STL, 2 PLY 
             reader.ReadFile()
             reader.Update()
             reader.SetPrimitiveUsed(True)
-            #FDTD.AddEdges2Grid(dirs='all', properties=metal, metal_edge_res=.0004)
-
-            # add a box using cylindrical coordinates
-            #start = [0, 0, -0.01]
-            #stop  = [0, 0,  0.01]
-            #metal.AddCylinder(start, stop, radius=.2)
 
         if o.intuitionRF_properties.object_type == "dumpbox":
             print("Found dumpbox")
             start, stop = start_stop_from_BB(o.bound_box)
             # TODO make this cacheable
-            filename_prefix = "/tmp/Et_"
+             
+            filename_prefix = f"{context.scene.intuitionRF_simdir}/{o.name}_"
             dumpbox = CSX.AddDump(filename_prefix)
             dumpbox.SetDumpType(int(o.intuitionRF_properties.dump_type))
             dumpbox.SetDumpMode(int(o.intuitionRF_properties.dump_mode))
             dumpbox.AddBox(start, stop)
-    
+
+        if o.intuitionRF_properties.object_type == "material":
+            filename = f"{context.scene.intuitionRF_simdir}/{o.name}.stl"
+            bpy.ops.object.select_all(action='DESELECT')
+            o.select_set(True)
+            bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+
+            # immediately reimport mesh as a CSX metal part
+            if o.intuitionRF_properties.material_use_kappa:
+                material = CSX.AddMaterial(
+                    o.name, 
+                    epsilon = o.intuitionRF_properties.material_epsilon,
+                    kappa = o.intuitionRF_properties.material_kappa
+                )
+            else:
+                material = CSX.AddMaterial(
+                    o.name, 
+                    epsilon = o.intuitionRF_properties.material_epsilon,
+                )
+            # import STL file
+            #
+            start, stop = start_stop_from_BB(o.bound_box)
+            #metal.AddBox(start, stop)
+            reader = material.AddPolyhedronReader(filename)
+            reader.SetFileType(1) # 1 STL, 2 PLY 
+            reader.ReadFile()
+            reader.Update()
+            reader.SetPrimitiveUsed(True)
 
     for o in objects_collection:
         if o.intuitionRF_properties.object_type == "port":
@@ -476,6 +516,7 @@ def register():
 
     bpy.utils.register_class(IntuitionRF_OT_preview_CSX)
     bpy.utils.register_class(IntuitionRF_OT_preview_PEC_dump)
+    bpy.utils.register_class(IntuitionRF_OT_run_sim)
 
 def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_add_meshline_x)
@@ -489,3 +530,4 @@ def unregister():
 
     bpy.utils.unregister_class(IntuitionRF_OT_preview_CSX)
     bpy.utils.unregister_class(IntuitionRF_OT_preview_PEC_dump)
+    bpy.utils.unregister_class(IntuitionRF_OT_run_sim)

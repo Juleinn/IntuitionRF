@@ -4,6 +4,8 @@ import bmesh
 import mathutils
 from mathutils import geometry
 import os
+import numpy as np 
+import matplotlib.pyplot as plt
 
 # workaround a bug in vtk/or python interpreter bundled with blender 
 from unittest.mock import MagicMock
@@ -13,6 +15,12 @@ import vtk
 from CSXCAD import CSXCAD
 from openEMS import openEMS
 from openEMS.physical_constants import *
+
+# workaround for blender not letting me register a LumpedPort to 
+# a blender object (probably for serialization ?)
+# Its OK to loose thoose references on blender exit (for now)
+from collections import defaultdict
+ports = defaultdict(lambda: None)
 
 import tempfile
 
@@ -263,7 +271,79 @@ class IntuitionRF_OT_run_sim(bpy.types.Operator):
         FDTD, CSX = objects_from_scene(FDTD, CSX, context)
 
         FDTD.Run(sim_path=context.scene.intuitionRF_simdir, cleanup=False)
+
+
         
+        return {"FINISHED"}
+
+
+
+class IntuitionRF_OT_plot_port_impedance(bpy.types.Operator):
+    """Run the currently defined simulation in OpenEMS"""
+    bl_idname = "intuitionrf.plot_port_impedance"
+    bl_label = "Plot Impedance"
+
+    def execute(self, context):
+        active_port = bpy.context.view_layer.objects.active 
+        if not active_port.intuitionRF_properties.object_type == "port":
+            self.report({'INFO'}, "Cannot plot impedance : not a port")
+
+        port = ports[active_port.name]
+
+        f0 = context.scene.center_freq * 1e6 
+        fc = context.scene.cutoff_freq * 1e6
+        fc = 100 * 1e6
+        f = np.linspace(f0-fc,f0+fc,601)
+
+        try:
+            port.CalcPort(context.scene.intuitionRF_simdir, f)
+        except:
+            self.report({'INFO'}, "Failed to calc port")
+
+        Zin = port.uf_tot / port.if_tot
+
+        plt.plot(f/1e6, np.real(Zin), 'k-', label='$\Re\{Z_{in}\}$')
+        plt.plot(f/1e6, np.imag(Zin), 'r--', label='$\Im\{Z_{in}\}$')
+        plt.legend()
+        plt.title('Port impedance')
+        plt.ylabel('Impedance (ohm)')
+        plt.xlabel('Frequency (MHz)')
+        plt.grid()
+        plt.show()
+
+        return {"FINISHED"}
+
+class IntuitionRF_OT_plot_port_return_loss(bpy.types.Operator):
+    """Run the currently defined simulation in OpenEMS"""
+    bl_idname = "intuitionrf.plot_port_return_loss"
+    bl_label = "Plot s11(dB)"
+
+    def execute(self, context):
+        active_port = bpy.context.view_layer.objects.active 
+        if not active_port.intuitionRF_properties.object_type == "port":
+            self.report({'INFO'}, "Cannot plot impedance : not a port")
+
+        port = ports[active_port.name]
+
+        f0 = context.scene.center_freq * 1e6 
+        fc = context.scene.cutoff_freq * 1e6
+        fc = 100 * 1e6
+        f = np.linspace(f0-fc,f0+fc,601)
+        try:
+            port.CalcPort(context.scene.intuitionRF_simdir, f)
+        except:
+            self.report({'INFO'}, "Failed to calc port")
+
+        Zin = port.uf_tot / port.if_tot
+        s11 = port.uf_ref/port.uf_inc
+        s11_dB = 20.0*np.log10(np.abs(s11))
+
+        plt.plot(f/1e6, s11_dB)
+        plt.ylabel('s11 (dB)')
+        plt.xlabel('f (MHz)')
+        plt.grid()
+        plt.show()
+
         return {"FINISHED"}
 
 
@@ -408,15 +488,17 @@ def objects_from_scene(FDTD, CSX, context):
             port_number = o.intuitionRF_properties.port_number
             direction = o.intuitionRF_properties.port_direction
             excite = 1.0 if o.intuitionRF_properties.port_active else 0.0 
-            FDTD.AddLumpedPort(port_number, impedance, 
+            port = FDTD.AddLumpedPort(port_number, impedance, 
                 start, stop, direction, excite)
 
-    f0 = 146e6 # center frequency, frequency of interest!
-    lambda0 = int(C0/f0) # wavelength in mm
-    nf2ff = FDTD.CreateNF2FFBox(opt_resolution=[lambda0/15]*3)
+            ports[o.name] = port
+
+    #f0 = 146e6 # center frequency, frequency of interest!
+    #lambda0 = int(C0/f0) # wavelength in mm
+    #nf2ff = FDTD.CreateNF2FFBox(opt_resolution=[lambda0/15]*3)
 
 
-    return FDTD, CSX
+    return FDTD, CSX 
 
 def meshlines_from_scene(CSX, context):
     lines = context.scene.intuitionRF_lines
@@ -517,6 +599,8 @@ def register():
     bpy.utils.register_class(IntuitionRF_OT_preview_CSX)
     bpy.utils.register_class(IntuitionRF_OT_preview_PEC_dump)
     bpy.utils.register_class(IntuitionRF_OT_run_sim)
+    bpy.utils.register_class(IntuitionRF_OT_plot_port_return_loss)
+    bpy.utils.register_class(IntuitionRF_OT_plot_port_impedance)
 
 def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_add_meshline_x)
@@ -531,3 +615,5 @@ def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_preview_CSX)
     bpy.utils.unregister_class(IntuitionRF_OT_preview_PEC_dump)
     bpy.utils.unregister_class(IntuitionRF_OT_run_sim)
+    bpy.utils.unregister_class(IntuitionRF_OT_plot_port_return_loss)
+    bpy.utils.unregister_class(IntuitionRF_OT_plot_port_impedance)

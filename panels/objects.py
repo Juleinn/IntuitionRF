@@ -5,8 +5,12 @@ import mathutils
 from mathutils import geometry
 
 from CSXCAD import CSXCAD
-from openEMS import openEMS
+from openEMS import openEMS, ports
 from openEMS.physical_constants import *
+
+import os
+sys.path.append(os.path.abspath('..'))
+from .. operators import meshing
 
 class IntuitionRF_ObjectProperties(bpy.types.PropertyGroup):
     object_type: bpy.props.EnumProperty(
@@ -105,12 +109,18 @@ class OBJECT_PT_intuitionRFPanel(bpy.types.Panel):
             row.prop(obj.intuitionRF_properties, "port_impedance")    
             row = layout.row()
             row.prop(obj.intuitionRF_properties, "port_direction")       
+            if obj.name in meshing.ports.keys():
+                row = layout.row()
+                row.operator("intuitionrf.plot_port_return_loss")
+                row.operator("intuitionrf.plot_port_impedance")
 
         if obj.intuitionRF_properties.object_type == "dumpbox":
             row = layout.row()
             row.prop(obj.intuitionRF_properties, "dump_type")
             row = layout.row()
             row.prop(obj.intuitionRF_properties, "dump_mode")
+
+
 
 def register():
     # register object classes

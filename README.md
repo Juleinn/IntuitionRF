@@ -1,6 +1,8 @@
 # IntuitionRF
 IntuitionRF is an OpenEMS wrapper plugin for blender aiming to make dealing with RF simulation more intuitive. 
 
+OpenEMS project page : https://www.openems.de/
+
 ## Contents
   - [Install](#install)
     - [Dependencies](#dependencies)

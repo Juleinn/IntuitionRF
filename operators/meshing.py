@@ -251,9 +251,9 @@ class IntuitionRF_OT_preview_PEC_dump(bpy.types.Operator):
 
         FDTD, CSX = objects_from_scene(FDTD, CSX, context)
 
-        mesh = CSX.GetGrid()
-        mesh_res = context.scene.intuitionRF_smooth_max_res
-        mesh.SmoothMeshLines('all', mesh_res, 1.4)
+        #mesh = CSX.GetGrid()
+        #mesh_res = context.scene.intuitionRF_smooth_max_res
+        #mesh.SmoothMeshLines('all', mesh_res, 1.4)
 
         # dry run the SIM
         FDTD.Run(sim_path=context.scene.intuitionRF_simdir, cleanup=False, setup_only=True, debug_material=True, debug_pec=True)
@@ -495,7 +495,7 @@ def objects_from_scene(FDTD, CSX, context):
                     prim.SetPriority(10)
                     dirs = 'xyz'.replace(normal, '')
                     mesh_res = context.scene.intuitionRF_smooth_mesh
-                    FDTD.AddEdges2Grid(dirs=dirs, properties=metal, metal_edge_res=mesh_res/2)
+                    #FDTD.AddEdges2Grid(dirs=dirs, properties=metal, metal_edge_res=mesh_res/2)
 
         # export metals (volume)
         if o.intuitionRF_properties.object_type == "metal_volume":
@@ -580,6 +580,10 @@ def objects_from_scene(FDTD, CSX, context):
 def meshlines_from_scene(CSX, context):
     lines = context.scene.intuitionRF_lines
     x, y, z = extract_lines_xyz(lines)
+    print("extracted lines")
+    print(x)
+    print(y)
+    print(z)
     
     mesh = CSX.GetGrid()
     unit = context.scene.intuitionRF_unit
@@ -589,6 +593,9 @@ def meshlines_from_scene(CSX, context):
     mesh.AddLine('x', list(x))
     mesh.AddLine('y', list(y))
     mesh.AddLine('z', list(z))
+
+    # also extract lines from objects
+    CSX = meshlines_from_vertex_groups(CSX, context)
 
     # smooth as required by user
     if context.scene.intuitionRF_smooth_mesh:
@@ -601,6 +608,47 @@ def meshlines_from_scene(CSX, context):
         pass
     return CSX
 
+def meshlines_from_vertex_groups(CSX, context):
+    # extract list of coordinates from vertex group named 'intuitionRF_verts'
+    x = set() 
+    y = set()
+    z = set()
+
+    objects_collection = context.scene.intuitionRF_objects.objects
+    for o in objects_collection:
+        # dump box need no meshing an neither do "None"
+        if o.intuitionRF_properties.object_type == "dumpbox":
+            continue
+        if o.intuitionRF_properties.object_type == "none":
+            continue
+        # skip objects that have no anchors assigned
+        if "intuitionRF_anchors" not in o.vertex_groups:
+            continue
+
+        # need to iterate over all vertices and check their weight in the group
+        intuitionRF_vgroup = o.vertex_groups['intuitionRF_anchors'].index
+        verts = o.data.vertices
+        for v in verts:
+            weights = [group.weight for group in v.groups if group.group == intuitionRF_vgroup]
+            # check in group, any nonzero weight will do
+            if len(weights) == 1 and weights[0] != 0: 
+                print(v.co)
+                
+                x.add(v.co[0])
+                y.add(v.co[1])
+                z.add(v.co[2])
+
+    print(x)
+    print(y)
+    print(z)
+    mesh = CSX.GetGrid()
+    # put lines in CSXCAD        
+    mesh.AddLine('x', list(sorted(x)))
+    mesh.AddLine('y', list(sorted(y)))
+    mesh.AddLine('z', list(sorted(z)))
+
+    return CSX
+        
 class IntuitionRF_OT_add_preview_lines(bpy.types.Operator):
     """ Add openEMS meshing lines preview """
     bl_idname = "intuitionrf.add_preview_lines"
@@ -625,9 +673,9 @@ class IntuitionRF_OT_add_preview_lines(bpy.types.Operator):
         x = mesh.GetLines('x')
         y = mesh.GetLines('y')
         z = mesh.GetLines('z')
-        print(f"x = {x}")
-        print(f"y = {y}")
-        print(f"z = {z}")
+        # print(f"x = {x}")
+        # print(f"y = {y}")
+        # print(f"z = {z}")
 
         unit = context.scene.intuitionRF_unit
         print(len(x))

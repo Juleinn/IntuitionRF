@@ -6,6 +6,7 @@ from mathutils import geometry
 import os
 import numpy as np 
 import matplotlib.pyplot as plt
+import math
 
 # workaround a bug in vtk/or python interpreter bundled with blender 
 from unittest.mock import MagicMock
@@ -21,6 +22,7 @@ from openEMS.physical_constants import *
 # Its OK to loose thoose references on blender exit (for now)
 from collections import defaultdict
 ports = defaultdict(lambda: None)
+nf2ff = None
 
 import tempfile
 
@@ -270,6 +272,7 @@ class IntuitionRF_OT_run_sim(bpy.types.Operator):
     bl_label = "Run SIM"
 
     def execute(self, context):
+        global nf2ff
         FDTD = openEMS(NrTS=1e6, EndCriteria=1e-4)
 
         CSX = CSXCAD.ContinuousStructure()
@@ -284,16 +287,93 @@ class IntuitionRF_OT_run_sim(bpy.types.Operator):
         mesh_res = context.scene.intuitionRF_smooth_max_res
         mesh.SmoothMeshLines('all', mesh_res, 1.4)
 
-# Add the nf2ff recording box
+        # Add the nf2ff recording box
         nf2ff = FDTD.CreateNF2FFBox()
 
         FDTD.Run(sim_path=context.scene.intuitionRF_simdir, cleanup=False)
-
-
         
         return {"FINISHED"}
 
+class IntuitionRF_OT_compute_NF2FF(bpy.types.Operator):
+    """Compute the near field to far field at resonnant frequency"""
+    bl_idname = "intuitionrf.compute_nf2ff"
+    bl_label = "Compute NF2FF"
 
+    def execute(self, context):
+        global nf2ff
+        if nf2ff == None:
+            self.report({'INFO'}, "NF2FF does not exist. (re)run sim")
+            return {"FINISHED"}
+
+
+        self.report({'INFO'}, "Computing NF2FF. This may take some time")
+        step_degrees = 5.0
+        step_count_theta = int(180 / step_degrees) 
+        step_count_phi = int(360 / step_degrees) 
+        theta = np.arange(-180.0, 180.0, step_degrees)
+        phi = np.arange(-360.0, 360.0, step_degrees)
+        nf2ff_res = nf2ff.CalcNF2FF(
+            sim_path=context.scene.intuitionRF_simdir,
+            freq=context.scene.intuitionRF_resonnant_freq * 1e6,
+            theta=theta,
+            phi=phi,
+            center=[0,0,0]
+        )
+
+        # phi = 0 => x-z plane
+        # theta = 90 => x-y plane
+        # phi 'horizontal' starting at X axis
+        # theta 'vertical' starting at Z axis
+
+        Dmax_dB = 10*np.log10(nf2ff_res.Dmax[0])
+        # don't know why add directivity but seems to be the way
+        # E_norm[0] -> frequency index 0 (only on here)
+        E_norm = 20.0*np.log10(nf2ff_res.E_norm[0]/np.max(nf2ff_res.E_norm[0])) \
+            + 10*np.log10(nf2ff_res.Dmax[0])
+
+        # E_norm[theta][phi]
+        #
+        # create a new mesh
+        mesh = bpy.data.meshes.new("rad_pattern")  # add a new mesh
+        rad_pat = bpy.data.objects.new("radiation_pattern", mesh)  # add a new object using the mesh
+        bpy.context.collection.objects.link(rad_pat)
+        
+        # draw lines in each directions         
+        verts = []
+        edges = []
+        faces = []
+        for it, t in enumerate(theta * math.pi / 180):
+            for ip, p in enumerate(phi * math.pi / 180):
+                # can probably do this numpy-way but we need the indices for meshing
+                norm = E_norm[it][ip]
+                # norm = 1
+                x = math.sin(t) * math.cos(p) * norm
+                y = math.sin(t) * math.sin(p) * norm
+                z = math.cos(t) * norm
+
+                # scaling factor here ?
+
+                verts.append(tuple((x, y, z)))
+
+        for it, _ in enumerate(theta[:-1]):
+            for ip, _ in enumerate(phi[:-1]):
+                i0 = (it * step_count_phi) + ip
+                i1 = (it * step_count_phi) + ip + 1
+                i2 = ((it+1) * step_count_phi) + ip 
+                i3 = ((it+1) * step_count_phi) + ip + 1
+                edges.append(tuple([i0, i1]))
+                edges.append(tuple([i0, i2]))
+
+                faces.append([i0, i1, i3, i2])
+
+        mesh.from_pydata(verts, edges, faces)
+        mesh.validate(verbose=True)
+
+                # do a uv-sphere meshing here
+
+        self.report({'INFO'}, "Complete")
+        
+        return {"FINISHED"}
 
 class IntuitionRF_OT_plot_port_impedance(bpy.types.Operator):
     """Run the currently defined simulation in OpenEMS"""
@@ -359,6 +439,11 @@ class IntuitionRF_OT_plot_port_return_loss(bpy.types.Operator):
         plt.xlabel('f (MHz)')
         plt.grid()
         plt.show()
+
+        # put resonnant frequency to the scene res. freq 
+        # multiple port not handled yet
+        res_freq = f[np.argmin(s11_dB)] / 1e6
+        context.scene.intuitionRF_resonnant_freq = res_freq
 
         return {"FINISHED"}
 
@@ -720,6 +805,7 @@ class IntuitionRF_OT_add_preview_lines(bpy.types.Operator):
             edges.append([len(verts) - 1, len(verts) - 2])
 
         mesh.from_pydata(verts, edges, faces)
+        mesh.validate(verbose=True)
         preview_lines.show_name = True
         preview_lines.hide_select = True
         context.scene.intuitionRF_previewlines = preview_lines
@@ -740,6 +826,7 @@ def register():
     bpy.utils.register_class(IntuitionRF_OT_run_sim)
     bpy.utils.register_class(IntuitionRF_OT_plot_port_return_loss)
     bpy.utils.register_class(IntuitionRF_OT_plot_port_impedance)
+    bpy.utils.register_class(IntuitionRF_OT_compute_NF2FF)
 
 def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_add_meshline_x)
@@ -756,3 +843,4 @@ def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_run_sim)
     bpy.utils.unregister_class(IntuitionRF_OT_plot_port_return_loss)
     bpy.utils.unregister_class(IntuitionRF_OT_plot_port_impedance)
+    bpy.utils.unregister_class(IntuitionRF_OT_compute_NF2FF)

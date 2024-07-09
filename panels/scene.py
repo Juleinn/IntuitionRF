@@ -66,6 +66,11 @@ class IntuitionRFPanel(bpy.types.Panel):
         row.operator("intuitionrf.preview_pec_dump")
         row = box.row()
         row.operator("intuitionrf.run_sim")
+        box = layout.box()
+        row = box.row()
+        row.prop(scene, 'intuitionRF_resonnant_freq')
+        row = box.row()
+        row.operator("intuitionrf.compute_nf2ff")
 
 def register():
     bpy.utils.register_class(IntuitionRFPanel)
@@ -108,6 +113,11 @@ is 1mm in simulation""",
         default=tmpdir,
         maxlen=1024,
         subtype='DIR_PATH'
+    )
+
+    bpy.types.Scene.intuitionRF_resonnant_freq = bpy.props.FloatProperty(
+        name = 'Resonnant frequency (MHz)',
+        default = 0
     )
 
 def unregister():

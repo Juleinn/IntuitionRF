@@ -7,6 +7,7 @@ import os
 import numpy as np 
 import matplotlib.pyplot as plt
 import math
+import glob
 
 # workaround a bug in vtk/or python interpreter bundled with blender 
 from unittest.mock import MagicMock
@@ -611,7 +612,11 @@ def objects_from_scene(FDTD, CSX, context):
             start, stop = start_stop_from_BB(o.bound_box)
             # TODO make this cacheable
              
-            filename_prefix = f"{context.scene.intuitionRF_simdir}/{o.name}_"
+            filename_prefix = f"{context.scene.intuitionRF_simdir}/{o.name}"
+            # remove any previously existing files
+            for f in glob.glob(f"{filename_prefix}*"):
+                os.remove(f)
+
             dumpbox = CSX.AddDump(filename_prefix)
             dumpbox.SetDumpType(int(o.intuitionRF_properties.dump_type))
             dumpbox.SetDumpMode(int(o.intuitionRF_properties.dump_mode))

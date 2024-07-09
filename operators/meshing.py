@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 sys.modules['vtkmodules.vtkRenderingMatplotlib'] = MagicMock()
 import vtk
 
-from CSXCAD import CSXCAD
+from CSXCAD import CSXCAD, CSPrimitives
 from openEMS import openEMS
 from openEMS.physical_constants import *
 
@@ -43,6 +43,8 @@ def extract_lines_xyz(lines):
         if verts[edge.vertices[0]].co[2] != verts[edge.vertices[1]].co[2]:
             z.add(verts[edge.vertices[0]].co[2])
             z.add(verts[edge.vertices[1]].co[2])            
+            print(verts[edge.vertices[0]].co[2])
+            print(verts[edge.vertices[1]].co[2])            
         
     return (x, y, z)
 
@@ -219,6 +221,10 @@ class IntuitionRF_OT_preview_CSX(bpy.types.Operator):
 
         FDTD, CSX = objects_from_scene(FDTD, CSX, context)
 
+        mesh = CSX.GetGrid()
+        mesh_res = context.scene.intuitionRF_smooth_max_res
+        mesh.SmoothMeshLines('all', mesh_res, 1.4)
+
         # create temporary dir
         tmp_dir = tempfile.mkdtemp()
         CSX_file = f"{tmp_dir}/meshing.xml"
@@ -245,6 +251,10 @@ class IntuitionRF_OT_preview_PEC_dump(bpy.types.Operator):
 
         FDTD, CSX = objects_from_scene(FDTD, CSX, context)
 
+        mesh = CSX.GetGrid()
+        mesh_res = context.scene.intuitionRF_smooth_max_res
+        mesh.SmoothMeshLines('all', mesh_res, 1.4)
+
         # dry run the SIM
         FDTD.Run(sim_path=context.scene.intuitionRF_simdir, cleanup=False, setup_only=True, debug_material=True, debug_pec=True)
 
@@ -260,15 +270,22 @@ class IntuitionRF_OT_run_sim(bpy.types.Operator):
     bl_label = "Run SIM"
 
     def execute(self, context):
-        FDTD = openEMS(NrTS=1e5, EndCriteria=1e-4)
+        FDTD = openEMS(NrTS=1e6, EndCriteria=1e-4)
 
         CSX = CSXCAD.ContinuousStructure()
         CSX = meshlines_from_scene(CSX, context)
         FDTD.SetCSX(CSX)
         FDTD.SetGaussExcite( context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
-        FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'PML_8'] )
+        FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'MUR'] )
 
         FDTD, CSX = objects_from_scene(FDTD, CSX, context)
+
+        mesh = CSX.GetGrid()
+        mesh_res = context.scene.intuitionRF_smooth_max_res
+        mesh.SmoothMeshLines('all', mesh_res, 1.4)
+
+# Add the nf2ff recording box
+        nf2ff = FDTD.CreateNF2FFBox()
 
         FDTD.Run(sim_path=context.scene.intuitionRF_simdir, cleanup=False)
 
@@ -292,7 +309,6 @@ class IntuitionRF_OT_plot_port_impedance(bpy.types.Operator):
 
         f0 = context.scene.center_freq * 1e6 
         fc = context.scene.cutoff_freq * 1e6
-        fc = 100 * 1e6
         f = np.linspace(f0-fc,f0+fc,601)
 
         try:
@@ -304,6 +320,7 @@ class IntuitionRF_OT_plot_port_impedance(bpy.types.Operator):
 
         plt.plot(f/1e6, np.real(Zin), 'k-', label='$\Re\{Z_{in}\}$')
         plt.plot(f/1e6, np.imag(Zin), 'r--', label='$\Im\{Z_{in}\}$')
+        plt.plot(f/1e6, np.absolute(Zin), label='Mag')
         plt.legend()
         plt.title('Port impedance')
         plt.ylabel('Impedance (ohm)')
@@ -327,7 +344,6 @@ class IntuitionRF_OT_plot_port_return_loss(bpy.types.Operator):
 
         f0 = context.scene.center_freq * 1e6 
         fc = context.scene.cutoff_freq * 1e6
-        fc = 100 * 1e6
         f = np.linspace(f0-fc,f0+fc,601)
         try:
             port.CalcPort(context.scene.intuitionRF_simdir, f)
@@ -356,7 +372,10 @@ def PEC_dump_to_scene(filename, context):
     PEC_dump = bpy.data.objects.new("PEC_dump", mesh)  # add a new object using the mesh
     bpy.context.collection.objects.link(PEC_dump)
     bpy.context.view_layer.objects.active = PEC_dump
-    
+
+    unit = context.scene.intuitionRF_unit
+    coords = [(coord[0]/unit, coord[1]/unit, coord[2]/unit) for coord in coords]
+
     mesh.from_pydata(coords, indices, [])
     PEC_dump.show_in_front = True
 
@@ -418,16 +437,73 @@ def start_stop_from_BB(bound_box):
 
     return [min_x, min_y, min_z], [max_x, max_y, max_z]
 
+def get_axis(verts):
+    """Determine the normal of verts located inside and axis aligned plane"""
+    v0 = verts[0] 
+    x = True 
+    y = True 
+    z = True
+
+    margin = .0001
+
+    for vert in verts[1:]:
+        if abs(vert[0] - v0[0]) > margin:
+            x = False
+        if abs(vert[1] - v0[1]) > margin:
+            y = False
+        if abs(vert[2] - v0[2]) > margin:
+            z = False
+
+    if x:
+        #transpose/slice without numpy
+        a0 = [v[1] for v in verts]
+        a1 = [v[2] for v in verts]
+        return 'x', v0[0], [a0, a1]
+    elif y:
+        a0 = [v[0] for v in verts]
+        a1 = [v[2] for v in verts]
+        return 'y', v0[1], [a1, a0]
+    elif z:
+        a0 = [v[0] for v in verts]
+        a1 = [v[1] for v in verts]
+        return 'z', v0[2], [a0, a1]
+    else: 
+        return 'None', None, None
+    
+
 def objects_from_scene(FDTD, CSX, context):
     """Exports relevant objects into the continous structure """
     objects_collection = context.scene.intuitionRF_objects.objects
 
     for o in objects_collection:
-        # export metals
-        if o.intuitionRF_properties.object_type == "metal":
+        if o.intuitionRF_properties.object_type == "metal_aa_faces":
+            polygons = o.data.polygons
+            vertices = o.data.vertices
+
+            for index, polygon in enumerate(polygons):
+                # add a CSX polygon each 
+                # improvement: use single polygon for convex continuous same-normal polygon sets
+                local_verts = [vertices[polygon.vertices[i]].co for i in range(len(polygon.vertices))]
+                co = [[i[0], i[1], i[2]] for i in local_verts]
+                normal, elevation, points = get_axis(co)
+                if normal != "None":
+                    print(points)
+                    print(normal)
+                    print(elevation)
+                    metal = CSX.AddMetal(f"{o.name}_{index}")
+                    prim = metal.AddPolygon(points, normal, elevation)
+                    prim.SetPriority(10)
+                    dirs = 'xyz'.replace(normal, '')
+                    mesh_res = context.scene.intuitionRF_smooth_mesh
+                    FDTD.AddEdges2Grid(dirs=dirs, properties=metal, metal_edge_res=mesh_res/2)
+
+        # export metals (volume)
+        if o.intuitionRF_properties.object_type == "metal_volume":
             filename = f"{context.scene.intuitionRF_simdir}/{o.name}.stl"
             bpy.ops.object.select_all(action='DESELECT')
             o.select_set(True)
+
+            unit = context.scene.intuitionRF_unit
             bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
 
             # immediately reimport mesh as a CSX metal part
@@ -437,6 +513,7 @@ def objects_from_scene(FDTD, CSX, context):
             start, stop = start_stop_from_BB(o.bound_box)
             #metal.AddBox(start, stop)
             reader = metal.AddPolyhedronReader(filename)
+            reader.SetPriority(10)
             reader.SetFileType(1) # 1 STL, 2 PLY 
             reader.ReadFile()
             reader.Update()
@@ -512,6 +589,7 @@ def meshlines_from_scene(CSX, context):
     mesh.AddLine('x', list(x))
     mesh.AddLine('y', list(y))
     mesh.AddLine('z', list(z))
+
     # smooth as required by user
     if context.scene.intuitionRF_smooth_mesh:
         # smooth all directions the same
@@ -520,6 +598,7 @@ def meshlines_from_scene(CSX, context):
         mesh.SmoothMeshLines('x', context.scene.intuitionRF_smooth_max_res, context.scene.intuitionRF_smooth_ratio)
         mesh.SmoothMeshLines('y', context.scene.intuitionRF_smooth_max_res, context.scene.intuitionRF_smooth_ratio)
         mesh.SmoothMeshLines('z', context.scene.intuitionRF_smooth_max_res, context.scene.intuitionRF_smooth_ratio)        
+        pass
     return CSX
 
 class IntuitionRF_OT_add_preview_lines(bpy.types.Operator):
@@ -531,10 +610,17 @@ class IntuitionRF_OT_add_preview_lines(bpy.types.Operator):
         if context.scene.intuitionRF_previewlines is not None:
             bpy.data.objects.remove(bpy.context.scene.intuitionRF_previewlines, do_unlink=True)
 
+        FDTD = openEMS(NrTS=1, EndCriteria=1e-4)
+
         CSX = CSXCAD.ContinuousStructure()
         CSX = meshlines_from_scene(CSX, context)
+        FDTD.SetCSX(CSX)
+        FDTD.SetGaussExcite( context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
+        FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'MUR'] )
+
+        FDTD, CSX = objects_from_scene(FDTD, CSX, context)
         mesh = CSX.GetGrid()
-            
+        
         # retrieve lines
         x = mesh.GetLines('x')
         y = mesh.GetLines('y')
@@ -542,7 +628,12 @@ class IntuitionRF_OT_add_preview_lines(bpy.types.Operator):
         print(f"x = {x}")
         print(f"y = {y}")
         print(f"z = {z}")
-                        
+
+        unit = context.scene.intuitionRF_unit
+        print(len(x))
+        print(len(y))
+        print(len(z))
+
         # create a new mesh
         mesh = bpy.data.meshes.new("preview_lines")  # add a new mesh
         preview_lines = bpy.data.objects.new("preview_lines", mesh)  # add a new object using the mesh

@@ -331,6 +331,8 @@ class IntuitionRF_OT_compute_NF2FF(bpy.types.Operator):
         E_norm = 20.0*np.log10(nf2ff_res.E_norm[0]/np.max(nf2ff_res.E_norm[0])) \
             + 10*np.log10(nf2ff_res.Dmax[0])
 
+        E_min = np.min(E_norm)
+
         # E_norm[theta][phi]
         #
         # create a new mesh
@@ -345,7 +347,9 @@ class IntuitionRF_OT_compute_NF2FF(bpy.types.Operator):
         for it, t in enumerate(theta * math.pi / 180):
             for ip, p in enumerate(phi * math.pi / 180):
                 # can probably do this numpy-way but we need the indices for meshing
-                norm = E_norm[it][ip]
+
+                # need to offset such that there is no negative gain furthur out than pos
+                norm = E_norm[it][ip] - E_min
                 # norm = 1
                 x = math.sin(t) * math.cos(p) * norm
                 y = math.sin(t) * math.sin(p) * norm
@@ -361,8 +365,6 @@ class IntuitionRF_OT_compute_NF2FF(bpy.types.Operator):
                 i1 = (it * step_count_phi) + ip + 1
                 i2 = ((it+1) * step_count_phi) + ip 
                 i3 = ((it+1) * step_count_phi) + ip + 1
-                edges.append(tuple([i0, i1]))
-                edges.append(tuple([i0, i2]))
 
                 faces.append([i0, i1, i3, i2])
 
@@ -728,9 +730,10 @@ def meshlines_from_vertex_groups(CSX, context):
     print(z)
     mesh = CSX.GetGrid()
     # put lines in CSXCAD        
-    mesh.AddLine('x', list(sorted(x)))
-    mesh.AddLine('y', list(sorted(y)))
-    mesh.AddLine('z', list(sorted(z)))
+    if len(list(x)) > 0:
+        mesh.AddLine('x', list(sorted(x)))
+        mesh.AddLine('y', list(sorted(y)))
+        mesh.AddLine('z', list(sorted(z)))
 
     return CSX
         

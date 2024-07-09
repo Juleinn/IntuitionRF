@@ -79,10 +79,6 @@ class OBJECT_OT_IntuitionRFPreferences(Operator):
     def execute(self, context):
         return {'FINISHED'}
 
-#syspath = ['', '/home/anton/code/python/libs', '/usr/local/lib/python311.zip', '/usr/local/lib/python3.11', '/usr/local/lib/python3.11/lib-dynload', '/home/anton/.local/lib/python3.11/site-packages', '/home/anton/.local/lib/python3.11/site-packages/CSXCAD-0.6.2-py3.11-linux-x86_64.egg', '/home/anton/.local/lib/python3.11/site-packages/openEMS-0.0.36-py3.11-linux-x86_64.egg', '/usr/local/lib/python3.11/site-packages']
-#for item in syspath:
-#    sys.path.append(item)
-        
 def register():
     bpy.utils.register_class(DetectSystem)
     bpy.utils.register_class(OBJECT_OT_IntuitionRFPreferences)

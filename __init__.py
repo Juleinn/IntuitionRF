@@ -14,17 +14,6 @@ from CSXCAD import CSXCAD
 from openEMS import openEMS
 from openEMS.physical_constants import *
 
-if "meshing" in locals(): #means Blender already started once
-    import importlib
-    print("reimporting")
-    importlib.reload(meshing)
-    importlib.reload(scene)
-    importlib.reload(objects)
-else: #start up
-    print("First time importing")
-    from . operators import meshing
-    from . panels import scene, objects
-
 from bpy.types import Operator, AddonPreferences
 from bpy.props import StringProperty
 import subprocess
@@ -88,8 +77,24 @@ def register():
     if addon_prefs.syspath == "":
         return
 
-    for item in addon_prefs.syspath:
+    import ast
+    syspath = ast.literal_eval(addon_prefs.syspath)
+
+    for item in syspath:
         sys.path.append(item)
+    print(sys.path)
+
+    if "meshing" in locals(): #means Blender already started once
+        import importlib
+        print("reimporting")
+        importlib.reload(meshing)
+        importlib.reload(scene)
+        importlib.reload(objects)
+    else: #start up
+        print("First time importing")
+        from . operators import meshing
+        from . panels import scene, objects
+
     # register operators
     meshing.register()
 

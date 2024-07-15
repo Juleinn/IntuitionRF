@@ -6,4 +6,5 @@ while true; do
         bspc node @parent -R 270
     ) &
     /home/anton/Downloads/blender-4.1.1-linux-x64/blender ./example.blend
+    # /home/anton/Downloads/blender-4.1.1-linux-x64/blender # ./example.blend
 done

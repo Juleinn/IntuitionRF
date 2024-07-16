@@ -24,9 +24,6 @@ import bmesh
 import mathutils
 from mathutils import geometry
 
-from CSXCAD import CSXCAD
-from openEMS import openEMS
-from openEMS.physical_constants import *
 
 from bpy.types import Operator, AddonPreferences
 from bpy.props import StringProperty

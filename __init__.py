@@ -1,21 +1,21 @@
-#bl_info = {
-#    "name": "IntuitionRF an OpenEMS wrapper for blender",
-#    "blender": (2, 80, 0),
-#    "category": "Object"
-#}
-# bl_info = {"name": "My Test Addon", "category": "Object"}
 bl_info = {
-    "name": "My Addon",
+    "name": "IntuitionRF an OpenEMS wrapper for blender",
     "blender": (2, 80, 0),
-    "category": "Object",
-    "version": (1, 0, 0),
-    "location": "View3D > Add > Mesh > My Addon",
-    "description": "An example add-on",
-    "warning": "",
-    "wiki_url": "",
-    "tracker_url": "",
-    "support": "COMMUNITY",
+    "category": "Object"
 }
+# bl_info = {"name": "My Test Addon", "category": "Object"}
+#bl_info = {
+#    "name": "My Addon",
+#    "blender": (2, 80, 0),
+#    "category": "Object",
+#    "version": (1, 0, 0),
+#    "location": "View3D > Add > Mesh > My Addon",
+#    "description": "An example add-on",
+#    "warning": "",
+#    "wiki_url": "",
+#    "tracker_url": "",
+#    "support": "COMMUNITY",
+#}
 
 
 import bpy 
@@ -87,13 +87,11 @@ class OBJECT_OT_IntuitionRFPreferences(Operator):
 #meshing = None
 #scene = None
 #objects = None
-#domain = None
 
 def register():
     global meshing
     global scene 
     global objects 
-    global domain
 
     bpy.utils.register_class(DetectSystem)
     bpy.utils.register_class(OBJECT_OT_IntuitionRFPreferences)
@@ -117,12 +115,10 @@ def register():
         importlib.reload(meshing)
         importlib.reload(scene)
         importlib.reload(objects)
-        importlib.reload(domain)
     else: #start up
         # print("First time importing")
         from . operators import meshing
         from . panels import scene, objects
-        from . nodes import domain
 
     # register operators
     meshing.register()
@@ -131,16 +127,10 @@ def register():
     scene.register()
     objects.register()
 
-    # register nodes
-    domain.register()
-
 def unregister():
-    global domain
     global objects 
     global scene 
     global meshing
-    #unregister nodes
-    domain.unregister()
 
     # unregister panels
     objects.unregister()

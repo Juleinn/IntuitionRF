@@ -23,7 +23,7 @@ import sys
 import bmesh
 import mathutils
 from mathutils import geometry
-
+import os
 
 from bpy.types import Operator, AddonPreferences
 from bpy.props import StringProperty
@@ -63,11 +63,18 @@ class IntuitionRFAddonPreferences(AddonPreferences):
         default=""
     )
 
+    openEMS_directory: StringProperty(
+        name="openEMS directory (windows only)",
+        default="",
+        subtype='DIR_PATH'
+    )
+
     def draw(self, context):
         layout = self.layout
         layout.label(text="Configure IntuitionRF to your openEMS install")
         layout.prop(self, "syspath")
         layout.operator(DetectSystem.bl_idname)
+        layout.prop(self, "openEMS_directory")
 
 
 class OBJECT_OT_IntuitionRFPreferences(Operator):
@@ -104,6 +111,11 @@ def register():
 
     for item in syspath:
         sys.path.append(item)
+
+    # import the dll path
+    if sys.platform == "win32" and addon_prefs.openEMS_directory != "":
+        os.add_dll_directory(addon_prefs.openEMS_directory)
+    
     # print(sys.path)
     #
     if 'meshing' in globals(): #means Blender already started once

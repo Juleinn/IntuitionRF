@@ -6,6 +6,7 @@ import mathutils
 from mathutils import geometry
 
 from CSXCAD import CSXCAD
+from numpy import minimum
 from openEMS import openEMS
 from openEMS.physical_constants import *
 
@@ -33,6 +34,12 @@ class IntuitionRFPanel(bpy.types.Panel):
         if context.scene.intuitionRF_excitation_type == "gauss":
             row = box.row()
             row.prop(scene, "cutoff_freq")
+
+        if context.scene.intuitionRF_excitation_type == "custom":
+            row = box.row()
+            row.prop(scene, "cutoff_freq")
+            row = box.row()
+            row.prop(scene, "intuitionRF_excitation_custom_function")
 
         box = layout.box()
         row = box.row()
@@ -64,6 +71,9 @@ class IntuitionRFPanel(bpy.types.Panel):
         row = box.row()
         row.operator("intuitionrf.preview_csx")
         row.operator("intuitionrf.preview_pec_dump")
+        box = layout.box()
+        row = box.row()
+        row.prop(scene, "intuitionRF_oversampling")
         row = box.row()
         row.operator("intuitionrf.run_sim")
         box = layout.box()
@@ -91,9 +101,12 @@ is 1mm in simulation""",
         description = 'Select an option', 
         items = [
             ('gauss', 'Gaussian', 'Gaussian Excite'),
-            ('sine', 'Sine', 'Sine Excite')
+            ('sine', 'Sine', 'Sine Excite'),
+            ('custom', 'Custom', 'Custom Excite')
         ]
     )
+    bpy.types.Scene.intuitionRF_excitation_custom_function = bpy.props.StringProperty(name='Custom excitation function')
+
     bpy.types.Scene.intuitionRF_lines = bpy.props.PointerProperty(type=bpy.types.Object, name='lines')
     bpy.types.Scene.intuitionRF_smooth_mesh = bpy.props.BoolProperty(
         name="Smooth mesh lines",
@@ -118,6 +131,13 @@ is 1mm in simulation""",
     bpy.types.Scene.intuitionRF_resonnant_freq = bpy.props.FloatProperty(
         name = 'Resonnant frequency (MHz)',
         default = 0
+    )
+
+    bpy.types.Scene.intuitionRF_oversampling = bpy.props.IntProperty(
+        name = 'oversampling',
+        description = 'Oversampling of probes/dumps as a multiple of the nyquist rate',
+        default=1,
+        min=1
     )
 
 def unregister():

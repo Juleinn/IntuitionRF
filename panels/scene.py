@@ -82,6 +82,16 @@ class IntuitionRFPanel(bpy.types.Panel):
         row = box.row()
         row.operator("intuitionrf.compute_nf2ff")
 
+        box = layout.box()
+        row = box.row() 
+        row.label(text="Checking for latest release on Github.")
+        row = box.row()
+        row.label(text="This will require internet access.")
+        row = box.row()
+        row.label(text="This will not auto-install anything.")
+        row = box.row()
+        row.operator("intuitionrf.check_updates")
+
 def register():
     bpy.utils.register_class(IntuitionRFPanel)
     bpy.types.Scene.intuitionRF_unit = bpy.props.FloatProperty(

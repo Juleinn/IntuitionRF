@@ -386,6 +386,37 @@ class IntuitionRF_OT_compute_NF2FF(bpy.types.Operator):
         
         return {"FINISHED"}
 
+class IntuitionRF_OT_check_updates(bpy.types.Operator):
+    """Check for plugin updates"""
+    bl_idname = "intuitionrf.check_updates"
+    bl_label = "Check Plugin Updates"
+
+    def execute(self, context):
+        current_version = sys.modules.get('IntuitionRF').bl_info['version']
+        print(f"{current_version=}")
+
+        import requests
+        import json
+        r = requests.get("https://api.github.com/repos/Juleinn/IntuitionRF/releases/latest")
+
+        if r.status_code != 200:
+            self.report({'ERROR'}, "Failed to get latest version number. Please check manually")
+            return {"FINISHED"}
+
+        latest_tagname = json.loads(r.content)['tag_name']
+        print(latest_tagname)
+
+        latest_major = int(latest_tagname[0])
+        latest_minor = int(latest_tagname[2])
+        latest_patch = int(latest_tagname[4])
+        
+        if latest_major == current_version[0] and latest_minor == current_version[1] and latest_patch == current_version[2]:
+            self.report({'INFO'}, "IntuitionRF is up to date")
+        else: 
+            self.report({'INFO'}, f"Current {current_version[0]}.{current_version[1]}.{current_version[2]} - Latest: {latest_tagname[:5]} ({latest_tagname})")
+
+        return {"FINISHED"}
+
 class IntuitionRF_OT_plot_port_impedance(bpy.types.Operator):
     """Run the currently defined simulation in OpenEMS"""
     bl_idname = "intuitionrf.plot_port_impedance"
@@ -857,6 +888,7 @@ def register():
     bpy.utils.register_class(IntuitionRF_OT_plot_port_return_loss)
     bpy.utils.register_class(IntuitionRF_OT_plot_port_impedance)
     bpy.utils.register_class(IntuitionRF_OT_compute_NF2FF)
+    bpy.utils.register_class(IntuitionRF_OT_check_updates)
 
 def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_add_meshline_x)
@@ -874,3 +906,4 @@ def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_plot_port_return_loss)
     bpy.utils.unregister_class(IntuitionRF_OT_plot_port_impedance)
     bpy.utils.unregister_class(IntuitionRF_OT_compute_NF2FF)
+    bpy.utils.unregister_class(IntuitionRF_OT_check_updates)

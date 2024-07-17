@@ -18,6 +18,13 @@ OpenEMS project page : https://www.openems.de/
     - [4. Enable the addon](#4-enable-the-addon)
     - [5. Reload plugins](#5-reload-plugins)
     - [6. Properties](#6-properties)
+    - [7. Checking for updates](#7-checking-for-updates)
+    - [Install procedure on Windows with pre-built OpenEMS distribution](#install-procedure-on-windows-with-pre-built-openems-distribution)
+      - [OpenEMS](#openems)
+      - [install the addon](#install-the-addon)
+      - [configure the addon](#configure-the-addon)
+      - [check install](#check-install)
+
 
 
 https://www.youtube.com/watch?v=oCE_hrCGen4
@@ -74,6 +81,15 @@ Use blender's 'reload scripts' (F3->reload scripts). The plugin should now be re
 ### 6. Properties
 You should now see new IntuitionRF properties panels under the 'object' and 'scene' categories.
 ![panels](images/panels.png)
+
+### 7. Checking for updates 
+This plugin  might be updated with bug fixes or new features. If you find a bug or have an issue with the plugin make sure to run the latest version. 
+
+A feature lets you check the plugin's latest release using Github's API. This is not automatic. This will not install anything, just tell you if you're up to date. 
+
+**I do not collect any telemetry/data from the plugin's usage. Feel free to manually check for updates if you do not feel like using Github's API**
+
+![check updates](images/check_for_updates.png)
 
 ### Install procedure on Windows with pre-built OpenEMS distribution
 #### OpenEMS

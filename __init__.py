@@ -1,7 +1,9 @@
 bl_info = {
     "name": "IntuitionRF an OpenEMS wrapper for blender",
     "blender": (2, 80, 0),
-    "category": "Object"
+    "category": "Object",
+    "version": (0,0,1),
+    "description": "A plugin for setting up OpenEMS simulations in Blender"
 }
 # bl_info = {"name": "My Test Addon", "category": "Object"}
 #bl_info = {
@@ -17,9 +19,15 @@ bl_info = {
 #    "support": "COMMUNITY",
 #}
 
+import sys
+if __name__ == "__main__":
+    # for release building
+    if sys.argv[1] == "--version":
+        v = bl_info["version"]
+        print(f"{v[0]}.{v[1]}.{v[2]}")
+        sys.exit(1)
 
 import bpy 
-import sys
 import bmesh
 import mathutils
 from mathutils import geometry

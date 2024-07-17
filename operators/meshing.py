@@ -275,11 +275,19 @@ class IntuitionRF_OT_run_sim(bpy.types.Operator):
     def execute(self, context):
         global nf2ff
         FDTD = openEMS(NrTS=1e6, EndCriteria=1e-4)
+        if context.scene.intuitionRF_oversampling > 1:
+            FDTD.SetOverSampling(context.scene.intuitionRF_oversampling)
 
         CSX = CSXCAD.ContinuousStructure()
         CSX = meshlines_from_scene(CSX, context)
         FDTD.SetCSX(CSX)
-        FDTD.SetGaussExcite( context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
+        if context.scene.intuitionRF_excitation_type == "gauss":
+            FDTD.SetGaussExcite( context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
+        elif context.scene.intuitionRF_excitation_type == "custom":
+            FDTD.SetCustomExcite( context.scene.intuitionRF_excitation_custom_function, context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
+        else:
+            FDTD.SetSinusExcite( context.scene.center_freq * 1e6)
+
         FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'MUR'] )
 
         FDTD, CSX = objects_from_scene(FDTD, CSX, context)
@@ -606,6 +614,20 @@ def objects_from_scene(FDTD, CSX, context):
             reader.ReadFile()
             reader.Update()
             reader.SetPrimitiveUsed(True)
+
+        if o.intuitionRF_properties.object_type == "metal_edges":
+            print("Found metal edges")
+            edges = o.data.edges
+            vertices = o.data.vertices
+
+            metal = CSX.AddMetal(o.name)
+
+            for index, edge in enumerate(edges):
+                v0 = vertices[edge.vertices[0]].co
+                v1 = vertices[edge.vertices[1]].co
+
+                coords = np.array([v0, v1])
+                metal.AddCurve(coords.T)
 
         if o.intuitionRF_properties.object_type == "dumpbox":
             print("Found dumpbox")

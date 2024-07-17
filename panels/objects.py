@@ -20,6 +20,7 @@ class IntuitionRF_ObjectProperties(bpy.types.PropertyGroup):
             ('none', 'None', 'Ignored for computations'),
             ('metal_volume', 'metal (Volume)', 'metal (Volume)'),
             ('metal_aa_faces', 'metal (AA faces)', 'metal (AA faces)'),
+            ('metal_edges', 'metal (edges)', 'metal (edges)'),
             ('material', 'material (\u03B5,\u03BA)', 'material defined by \u03B5 and \u03BA'),
             ('dumpbox', 'Dump Box', 'Dump box for E or H fields (to be specified)'),
             ('nf2ff', 'NF2FF Box', 'Near Field to Far Field computation box'),

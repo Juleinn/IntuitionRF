@@ -2,7 +2,7 @@ bl_info = {
     "name": "IntuitionRF an OpenEMS wrapper for blender",
     "blender": (2, 80, 0),
     "category": "Object",
-    "version": (0,1,0),
+    "version": (0,2,0),
     "description": "A plugin for setting up OpenEMS simulations in Blender"
 }
 # bl_info = {"name": "My Test Addon", "category": "Object"}

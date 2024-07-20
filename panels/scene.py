@@ -2,6 +2,7 @@ import tempfile
 import bpy 
 import sys
 import bmesh
+from bpy.props import EnumProperty
 import mathutils
 from mathutils import geometry
 
@@ -25,6 +26,7 @@ class IntuitionRFPanel(bpy.types.Panel):
         row = layout.row()
         row.prop(scene, "intuitionRF_unit")
         
+        # excitation parameters
         box = layout.box()
         box.label(text="Excitation")
         row = box.row()
@@ -41,9 +43,12 @@ class IntuitionRFPanel(bpy.types.Panel):
             row = box.row()
             row.prop(scene, "intuitionRF_excitation_custom_function")
 
+        # collection to be used
         box = layout.box()
         row = box.row()
         row.prop(scene, "intuitionRF_objects")
+
+        # meshing helpers
         box = layout.box()
         row = box.row()
         wavelength = 300.0 / context.scene.center_freq
@@ -65,12 +70,16 @@ class IntuitionRFPanel(bpy.types.Panel):
         row.operator("intuitionrf.add_meshline_x")
         row.operator("intuitionrf.add_meshline_y")
         row.operator("intuitionrf.add_meshline_z")
+
+        # sim preview
         box = layout.box()
         row = box.row()
         row.prop(scene, 'intuitionRF_simdir')
         row = box.row()
         row.operator("intuitionrf.preview_csx")
         row.operator("intuitionrf.preview_pec_dump")
+
+        # run SIM and far field compute
         box = layout.box()
         row = box.row()
         row.prop(scene, "intuitionRF_oversampling")
@@ -82,6 +91,16 @@ class IntuitionRFPanel(bpy.types.Panel):
         row = box.row()
         row.operator("intuitionrf.compute_nf2ff")
 
+        # list ports and compute parameters
+        box = layout.box()
+        row = box.row()
+        row.label(text='Port Index')
+        row.prop(scene, "intuitionRF_port_selector")
+        row = box.row()
+        row.operator("intuitionrf.plot_impedance")
+        row.operator("intuitionrf.plot_return_loss")
+
+        # check releases
         box = layout.box()
         row = box.row() 
         row.label(text="Checking for latest release on Github.")
@@ -91,6 +110,17 @@ class IntuitionRFPanel(bpy.types.Panel):
         row.label(text="This will not auto-install anything.")
         row = box.row()
         row.operator("intuitionrf.check_updates")
+
+def update_port_list(ports_list):
+    ports = []
+    for index, port in ports_list.items():
+        ports.append(tuple((index, str(index), str(index))))
+
+    bpy.types.Scene.intuitionRF_port_selector = EnumProperty(
+        name = '',
+        description='Select a port for s11 plotting',
+        items = ports
+    )    
 
 def register():
     bpy.utils.register_class(IntuitionRFPanel)
@@ -148,6 +178,13 @@ is 1mm in simulation""",
         description = 'Oversampling of probes/dumps as a multiple of the nyquist rate',
         default=1,
         min=1
+    )
+
+    bpy.types.Scene.intuitionRF_port_selector = bpy.props.EnumProperty(
+        name = 'port',
+        description = 'Select port for parameter plotting', 
+        items = [
+        ]
     )
 
 def unregister():

@@ -25,6 +25,7 @@ class IntuitionRF_ObjectProperties(bpy.types.PropertyGroup):
             ('dumpbox', 'Dump Box', 'Dump box for E or H fields (to be specified)'),
             ('nf2ff', 'NF2FF Box', 'Near Field to Far Field computation box'),
             ('port', 'Port', 'Excitation Port'),
+            ('geometry_node', 'Geometry Node', 'Defer primitive generation to custom geometry nodes')
         ]
     )
     # material properties

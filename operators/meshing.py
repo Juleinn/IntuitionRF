@@ -8,9 +8,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import glob
+from collections import defaultdict
 
 # workaround a bug in vtk/or python interpreter bundled with blender 
 from unittest.mock import MagicMock
+
+from ..panels.scene import update_port_list
 sys.modules['vtkmodules.vtkRenderingMatplotlib'] = MagicMock()
 import vtk
 
@@ -276,6 +279,7 @@ class IntuitionRF_OT_run_sim(bpy.types.Operator):
         global nf2ff
         FDTD = openEMS(NrTS=1e6, EndCriteria=1e-4)
         if context.scene.intuitionRF_oversampling > 1:
+            print('------------------------------------------ set oversampling !!!')
             FDTD.SetOverSampling(context.scene.intuitionRF_oversampling)
 
         CSX = CSXCAD.ContinuousStructure()
@@ -300,6 +304,8 @@ class IntuitionRF_OT_run_sim(bpy.types.Operator):
         nf2ff = FDTD.CreateNF2FFBox()
 
         FDTD.Run(sim_path=context.scene.intuitionRF_simdir, cleanup=False)
+
+        update_port_list(ports)
         
         return {"FINISHED"}
 
@@ -417,18 +423,10 @@ class IntuitionRF_OT_check_updates(bpy.types.Operator):
 
         return {"FINISHED"}
 
-class IntuitionRF_OT_plot_port_impedance(bpy.types.Operator):
-    """Run the currently defined simulation in OpenEMS"""
-    bl_idname = "intuitionrf.plot_port_impedance"
-    bl_label = "Plot Impedance"
-
-    def execute(self, context):
-        active_port = bpy.context.view_layer.objects.active 
-        if not active_port.intuitionRF_properties.object_type == "port":
-            self.report({'INFO'}, "Cannot plot impedance : not a port")
-
-        port = ports[active_port.name]
-
+class IntuitionRF_impedance_plotter(bpy.types.Operator):
+    """Base class for operators for plotting from the object context 
+    aswell as from the scene panel"""
+    def plot_impedance(self, port, context):
         f0 = context.scene.center_freq * 1e6 
         fc = context.scene.cutoff_freq * 1e6
         f = np.linspace(f0-fc,f0+fc,601)
@@ -450,12 +448,11 @@ class IntuitionRF_OT_plot_port_impedance(bpy.types.Operator):
         plt.grid()
         plt.show()
 
-        return {"FINISHED"}
 
-class IntuitionRF_OT_plot_port_return_loss(bpy.types.Operator):
+class IntuitionRF_OT_plot_port_impedance(IntuitionRF_impedance_plotter):
     """Run the currently defined simulation in OpenEMS"""
-    bl_idname = "intuitionrf.plot_port_return_loss"
-    bl_label = "Plot s11(dB)"
+    bl_idname = "intuitionrf.plot_port_impedance"
+    bl_label = "Plot Impedance"
 
     def execute(self, context):
         active_port = bpy.context.view_layer.objects.active 
@@ -463,7 +460,29 @@ class IntuitionRF_OT_plot_port_return_loss(bpy.types.Operator):
             self.report({'INFO'}, "Cannot plot impedance : not a port")
 
         port = ports[active_port.name]
+        
+        self.plot_impedance(port, context)
 
+        return {"FINISHED"}
+
+class IntuitionRF_OT_plot_impedance(IntuitionRF_impedance_plotter):
+    """Run the currently defined simulation in OpenEMS"""
+    bl_idname = "intuitionrf.plot_impedance"
+    bl_label = "Plot Impedance"
+
+    def execute(self, context):
+        active_port = ports[context.scene.intuitionRF_port_selector]
+
+        self.plot_impedance(active_port, context)
+
+
+        return {"FINISHED"}
+
+class IntuitionRF_returnloss_plotter(bpy.types.Operator):
+    """Baseclass for running the s11 plots from the object 
+    and scene panels contexts"""
+
+    def plot_s11(self, port, context):
         f0 = context.scene.center_freq * 1e6 
         fc = context.scene.cutoff_freq * 1e6
         f = np.linspace(f0-fc,f0+fc,601)
@@ -486,6 +505,32 @@ class IntuitionRF_OT_plot_port_return_loss(bpy.types.Operator):
         # multiple port not handled yet
         res_freq = f[np.argmin(s11_dB)] / 1e6
         context.scene.intuitionRF_resonnant_freq = res_freq
+
+class IntuitionRF_OT_plot_port_return_loss(IntuitionRF_returnloss_plotter):
+    """Run the currently defined simulation in OpenEMS"""
+    bl_idname = "intuitionrf.plot_port_return_loss"
+    bl_label = "Plot s11(dB)"
+
+    def execute(self, context):
+        active_port = bpy.context.view_layer.objects.active 
+        if not active_port.intuitionRF_properties.object_type == "port":
+            self.report({'INFO'}, "Cannot plot impedance : not a port")
+
+        port = ports[active_port.name]
+
+        self.plot_s11(port, context)
+
+        return {"FINISHED"}
+
+class IntuitionRF_OT_plot_return_loss(IntuitionRF_returnloss_plotter):
+    """Run the currently defined simulation in OpenEMS"""
+    bl_idname = "intuitionrf.plot_return_loss"
+    bl_label = "Plot s11(dB)"
+
+    def execute(self, context):
+        active_port = ports[context.scene.intuitionRF_port_selector]
+
+        self.plot_s11(active_port, context)
 
         return {"FINISHED"}
 
@@ -555,12 +600,12 @@ def extract_lines_from_vtp(filename):
 def start_stop_from_BB(bound_box):
     for vert in bound_box:
         print(vert)
-    min_x = min(vert[0] for vert in bound_box)
-    min_y = min(vert[1] for vert in bound_box)
-    min_z = min(vert[2] for vert in bound_box)
-    max_x = max(vert[0] for vert in bound_box)
-    max_y = max(vert[1] for vert in bound_box)
-    max_z = max(vert[2] for vert in bound_box)
+    min_x = min(round(vert[0], 5) for vert in bound_box)
+    min_y = min(round(vert[1], 5) for vert in bound_box)
+    min_z = min(round(vert[2], 5) for vert in bound_box)
+    max_x = max(round(vert[0], 5) for vert in bound_box)
+    max_y = max(round(vert[1], 5) for vert in bound_box)
+    max_z = max(round(vert[2], 5) for vert in bound_box)
 
     return [min_x, min_y, min_z], [max_x, max_y, max_z]
 
@@ -611,7 +656,9 @@ def objects_from_scene(FDTD, CSX, context):
                 # add a CSX polygon each 
                 # improvement: use single polygon for convex continuous same-normal polygon sets
                 local_verts = [vertices[polygon.vertices[i]].co for i in range(len(polygon.vertices))]
-                co = [[i[0], i[1], i[2]] for i in local_verts]
+                co = [[round(i[0], 5), 
+                       round(i[1], 5), 
+                       round(i[2], 5)] for i in local_verts]
                 normal, elevation, points = get_axis(co)
                 if normal != "None":
                     print(points)
@@ -654,6 +701,7 @@ def objects_from_scene(FDTD, CSX, context):
             metal = CSX.AddMetal(o.name)
 
             for index, edge in enumerate(edges):
+                # TODO rounding
                 v0 = vertices[edge.vertices[0]].co
                 v1 = vertices[edge.vertices[1]].co
 
@@ -703,6 +751,40 @@ def objects_from_scene(FDTD, CSX, context):
             reader.Update()
             reader.SetPrimitiveUsed(True)
 
+        # might night to change name later to account for making modifiers used in the setup
+        # (not currently the case)
+        if o.intuitionRF_properties.object_type == "geometry_node":
+            print("Found attribute geometry node")
+            depsgraph = context.evaluated_depsgraph_get()
+            evaluated_obj = o.evaluated_get(depsgraph)
+
+            # now we look for vertices flagged with known attributes
+            attributes = evaluated_obj.data.attributes
+
+            for attribute in attributes:
+                print(attribute.name)
+                if attribute.name == "intuitionrf.port_index":
+                    print("Found attribute port index")
+                    ports_from_geometry_nodes(evaluated_obj, FDTD, CSX)
+
+                if attribute.name == "intuitionrf.pec_edge":
+                    print("Found attribute PEC edge")
+                    pec_edges_from_geometry_nodes(evaluated_obj, FDTD, CSX)
+
+                if attribute.name == "intuitionrf.pec_aa_face":
+                    print("Found attribute pec aa face")
+                    pec_aa_faces_from_geometry_nodes(evaluated_obj, FDTD, CSX)
+
+                if attribute.name == "intuitionrf.pec_volume":
+                    print("Found attribute pec volume")
+                    pec_volume_from_geometry_nodes(evaluated_obj, context, FDTD, CSX)
+
+                if attribute.name == "intuitionrf.epsilonr":
+                    print("Found a material")
+                    material_from_geometry_nodes(evaluated_obj, context, FDTD, CSX)
+
+    # needed to add ports after every other element
+    # TODO handle ports defined in geometry nodes
     for o in objects_collection:
         if o.intuitionRF_properties.object_type == "port":
             start, stop = start_stop_from_BB(o.bound_box)
@@ -715,12 +797,253 @@ def objects_from_scene(FDTD, CSX, context):
 
             ports[o.name] = port
 
-    #f0 = 146e6 # center frequency, frequency of interest!
-    #lambda0 = int(C0/f0) # wavelength in mm
-    #nf2ff = FDTD.CreateNF2FFBox(opt_resolution=[lambda0/15]*3)
-
-
     return FDTD, CSX 
+
+def material_from_geometry_nodes(evaluated_obj, context, FDTD, CSX):
+    pass
+
+    # sort materials according to their use of kappa, epsilon and (optional) kappa values
+    # assume the presence of 'use_kappa' and 'kappa' if 'epsilonR' present
+    material_data =  zip(evaluated_obj.data.polygons, 
+                         evaluated_obj.data.attributes['intuitionrf.epsilonr'].data,
+                         evaluated_obj.data.attributes['intuitionrf.use_kappa'].data,
+                         evaluated_obj.data.attributes['intuitionrf.kappa'].data
+                         )
+    # filter out 0-epsilonR materials (epsilonR = 0 isn't possible and is use to mark faces as not part of a material)
+    material_data = [item for item in material_data if item[1].value != 0]
+
+    materials = defaultdict(lambda: [])
+    for index, item in enumerate(material_data):
+        # we will have a tuple as the key here because we don't want to nest the 
+        # dictionnary output
+        materials[(item[1].value, item[2].value, item[3].value)].append(item[0])
+
+    print(f"found {len(materials.keys())} different material er/kappa combinations")
+
+    # now for each material we found we export the STL
+    # and reimport it into OpenEMS immediately
+    # TODO de-duplicate this whole export STL section
+    for index, (key, polygons) in enumerate(materials.items()):
+        epsilonR = key[0]
+        use_kappa = key[1]
+        kappa = key[2]
+        
+        mesh = bpy.data.meshes.new(f"{evaluated_obj.name}.material.{index}.tmp")
+        obj = bpy.data.objects.new(f"{evaluated_obj.name}.material.{index}.tmp", mesh)
+
+        # add all vertices from the source object, just not all the faces
+        # this will litter the tmp object with potentially unused vertices 
+        # but they will be lost on stl export (terrible solution, but it works)
+        # which avoids rewriting all face vertices indices
+        # In this case rounding vertex coords is not curcially important because 
+        # it is meant to be evaluated as a mesh anyway
+        vertices = [item.co for item in evaluated_obj.data.vertices]
+        faces = []
+
+        for polygon in polygons:
+            faces.append(polygon.vertices)
+
+        mesh.from_pydata(vertices, [], faces)
+        mesh.update()
+
+        context.collection.objects.link(obj)
+
+        filename = f"{context.scene.intuitionRF_simdir}/{evaluated_obj.name}.material.{index}.stl"
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+
+        bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+
+        if use_kappa:
+            material = CSX.AddMaterial(
+                f"{evaluated_obj.name}.material.{index}",
+                epsilon = epsilonR,
+                kappa = kappa,
+            )
+        else:
+            material = CSX.AddMaterial(
+                f"{evaluated_obj.name}.material.{index}",
+                epsilon = epsilonR,
+            )
+
+        reader = material.AddPolyhedronReader(filename)
+        reader.SetFileType(1) # 1 STL, 2 PLY 
+        reader.ReadFile()
+        reader.Update()
+        reader.SetPrimitiveUsed(True)
+
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+
+def pec_volume_from_geometry_nodes(evaluated_obj, context, FDTD, CSX):
+    # need to 
+    # - create a new object, 
+    # - populate it with the data, 
+    # - export stl, 
+    # - delete object and 
+    # - reimport object
+
+    # now extract the vertices and faces if interest and then put them into the new object 
+    # there is probably a better way to achieve this
+    pec_data = zip(evaluated_obj.data.polygons, evaluated_obj.data.attributes['intuitionrf.pec_volume'].data)
+
+    # filter out faces of interest
+    pec_data = [item for item in pec_data if item[1].value == True]
+    if len(pec_data) == 0:
+        return 
+
+    mesh = bpy.data.meshes.new(f"{evaluated_obj.name}.pec_volume.tmp")
+    obj = bpy.data.objects.new(f"{evaluated_obj.name}.pec_volume.tmp", mesh)
+
+    # add all vertices from the source object, just not all the faces
+    # this will litter the tmp object with potentially unused vertices 
+    # but they will be lost on stl export (terrible solution, but it works)
+    # which avoids rewriting all face vertices indices
+    # In this case rounding vertex coords is not curcially important because 
+    # it is meant to be evaluated as a mesh anyway
+    vertices = [item.co for item in evaluated_obj.data.vertices]
+    faces = []
+    for index, item in enumerate(pec_data):
+        polygon = item[0].vertices
+
+        faces.append(polygon)
+
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+
+    context.collection.objects.link(obj)
+
+    filename = f"{context.scene.intuitionRF_simdir}/{evaluated_obj.name}.metal_volume.stl"
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+
+    bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+
+    # immediately reimport mesh as a CSX metal part
+    metal = CSX.AddMetal(f"{evaluated_obj.name}.pec_volume")
+
+    reader = metal.AddPolyhedronReader(filename)
+    reader.SetPriority(10)
+    reader.SetFileType(1) # 1 STL, 2 PLY 
+    reader.ReadFile()
+    reader.Update()
+    reader.SetPrimitiveUsed(True)
+
+    bpy.data.objects.remove(obj, do_unlink=True)
+
+def pec_aa_faces_from_geometry_nodes(evaluated_obj, FDTD, CSX):
+    pec_data = zip(evaluated_obj.data.polygons, evaluated_obj.data.attributes['intuitionrf.pec_aa_face'].data)
+
+    # filter out the faces we need
+    pec_data = [item for item in pec_data if item[1].value == True]
+    if len(pec_data) == 0:
+        return
+
+    for index, item in enumerate(pec_data):
+        # extract vertices from PEC face
+
+        # TODO de-duplicate this code from the objects aa face from destructive 
+        # topology
+        polygon = item[0]
+        vertices = evaluated_obj.data.vertices
+        local_verts = [vertices[polygon.vertices[i]].co for i in range(len(polygon.vertices))]
+        co = [[round(i[0], 5), 
+                round(i[1], 5), 
+                round(i[2], 5)] for i in local_verts]
+        normal, elevation, points = get_axis(co)
+
+        if normal != "None":
+            print(points)
+            print(normal)
+            print(elevation)
+            metal = CSX.AddMetal(f"{evaluated_obj.name}.pec_aa_face.{index}")
+            prim = metal.AddPolygon(points, normal, elevation)
+            prim.SetPriority(10)
+
+def pec_edges_from_geometry_nodes(evaluated_obj, FDTD, CSX):
+    pec_data = zip(evaluated_obj.data.edges, evaluated_obj.data.attributes['intuitionrf.pec_edge'].data)
+
+
+    # filter out any list with no pec edges at all 
+    # such as not to add empty curve primitives to the SIM
+    pec_data = [item for item in pec_data if item[1].value == True]
+    if len(pec_data) == 0:
+        return
+
+    metal = CSX.AddMetal(f"{evaluated_obj.name}.edges")
+
+    for item in pec_data:
+
+        v0 = evaluated_obj.data.vertices[item[0].vertices[0]].co 
+        v1 = evaluated_obj.data.vertices[item[0].vertices[1]].co
+
+        # round coords 
+        v0[0] = round(v0[0], 5)
+        v0[1] = round(v0[1], 5)
+        v0[2] = round(v0[2], 5)
+        v1[0] = round(v1[0], 5)
+        v1[1] = round(v1[1], 5)
+        v1[2] = round(v1[2], 5)
+        coords = np.array([v0, v1])
+        metal.AddCurve(coords.T)
+
+
+def ports_from_geometry_nodes(evaluated_obj, FDTD, CSX):
+    # assume other required attributes are defined aswell 
+    # (user didn't add store named attribute node of name 'intuitionrf.port_index')
+    
+    port_data = zip(evaluated_obj.data.vertices, 
+        evaluated_obj.data.attributes['intuitionrf.port_index'].data, 
+        evaluated_obj.data.attributes['intuitionrf.port_impedance'].data, 
+        evaluated_obj.data.attributes['intuitionrf.port_axis'].data, 
+        evaluated_obj.data.attributes['intuitionrf.port_active'].data 
+        )
+
+    port_dict = defaultdict(lambda: []) # map each port data by the port index
+    # ports[index] = [(vertex, impedance, axis, active), (vertex, impedance, axis, active), ...]
+    for item in port_data:
+        if item[1].value == 0: # invalid port index 
+            continue
+        # we want to extract the actual float values from the nested data structures here for 
+        # further processing
+        port_dict[item[1].value].append(list(tuple(
+            (
+                # x,y,z coords of the point
+                round(item[0].co[0], 5), 
+                round(item[0].co[1], 5),
+                round(item[0].co[2], 5),
+                item[2].value, 
+                # x, y, z coords of the orientation at the point
+                round(item[3].vector[0], 5), 
+                round(item[3].vector[1], 5), 
+                round(item[3].vector[2], 5), 
+                item[4].value
+            )
+        )))
+
+    # now we find for each port the average orienation vector, average active value, etc.. 
+    for key, value in port_dict.items(): 
+        value = np.array(value)
+        min_x, min_y, min_z = (np.min(value[:,0]), np.min(value[:,1]), np.min(value[:,2]))
+        max_x, max_y, max_z = (np.max(value[:,0]), np.max(value[:,1]), np.max(value[:,2]))
+        axis_x, axis_y, axis_z = (np.mean(value[:,4]), np.mean(value[:,5]), np.mean(value[:,6]))
+        axis_x, axis_y, axis_z = (abs(axis_x), abs(axis_y), abs(axis_z))
+        axis = "x"
+        if axis_y > axis_x and axis_y > axis_z:
+            axis = 'y'
+        if axis_z > axis_x and axis_z > axis_y:
+            axis = 'z'
+
+        impedance = np.mean(value[:,3])
+        active = float(np.mean(value[:,7]) > 0)
+
+        print(f"port {key} ({min_x},{min_y},{min_z}),({max_x, max_y, max_z}) has axis {axis}, impedance {impedance}, active : {active}")
+
+        port = FDTD.AddLumpedPort(key, impedance, 
+            [min_x, min_y, min_z], [max_x, max_y, max_z], axis, active)
+
+        # register it in the port list for later processing
+        ports[str(key)] = port
 
 def meshlines_from_scene(CSX, context):
     lines = context.scene.intuitionRF_lines
@@ -777,11 +1100,29 @@ def meshlines_from_vertex_groups(CSX, context):
             weights = [group.weight for group in v.groups if group.group == intuitionRF_vgroup]
             # check in group, any nonzero weight will do
             if len(weights) == 1 and weights[0] != 0: 
-                print(v.co)
                 
                 x.add(v.co[0])
                 y.add(v.co[1])
                 z.add(v.co[2])
+
+    # TODO loop the collection only once
+    for o in objects_collection:
+        # we also want to extract vertices from named attributes stored in geometry nodes
+        # TODO merge this with the above as to apply modifiers everywhere
+        dg = context.evaluated_depsgraph_get()
+        evaluated_object = o.evaluated_get(dg)
+        attr_anchors = [attr for attr in evaluated_object.data.attributes if attr.name == "intuitionrf.anchor"]
+        print(attr_anchors)
+        if len(attr_anchors) == 1:
+            attr_anchors = attr_anchors[0]
+            for i, v in enumerate(evaluated_object.data.vertices):
+                if attr_anchors.data[i].value == True:
+                    print("Found anchor")
+                    print(v.co)
+
+                    x.add(round(v.co[0], 5)) 
+                    y.add(round(v.co[1], 5))
+                    z.add(round(v.co[2], 5))
 
     print(x)
     print(y)
@@ -886,7 +1227,9 @@ def register():
     bpy.utils.register_class(IntuitionRF_OT_preview_PEC_dump)
     bpy.utils.register_class(IntuitionRF_OT_run_sim)
     bpy.utils.register_class(IntuitionRF_OT_plot_port_return_loss)
+    bpy.utils.register_class(IntuitionRF_OT_plot_return_loss)
     bpy.utils.register_class(IntuitionRF_OT_plot_port_impedance)
+    bpy.utils.register_class(IntuitionRF_OT_plot_impedance)
     bpy.utils.register_class(IntuitionRF_OT_compute_NF2FF)
     bpy.utils.register_class(IntuitionRF_OT_check_updates)
 
@@ -904,6 +1247,8 @@ def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_preview_PEC_dump)
     bpy.utils.unregister_class(IntuitionRF_OT_run_sim)
     bpy.utils.unregister_class(IntuitionRF_OT_plot_port_return_loss)
+    bpy.utils.unregister_class(IntuitionRF_OT_plot_return_loss)
     bpy.utils.unregister_class(IntuitionRF_OT_plot_port_impedance)
+    bpy.utils.unregister_class(IntuitionRF_OT_plot_impedance)
     bpy.utils.unregister_class(IntuitionRF_OT_compute_NF2FF)
     bpy.utils.unregister_class(IntuitionRF_OT_check_updates)

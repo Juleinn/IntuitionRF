@@ -104,6 +104,7 @@ def register():
     global meshing
     global scene 
     global objects 
+    global geometry_source
 
     bpy.utils.register_class(DetectSystem)
     bpy.utils.register_class(OBJECT_OT_IntuitionRFPreferences)
@@ -132,10 +133,12 @@ def register():
         importlib.reload(meshing)
         importlib.reload(scene)
         importlib.reload(objects)
+        importlib.reload(geometry_source)
     else: #start up
         # print("First time importing")
         from . operators import meshing
         from . panels import scene, objects
+        from . nodes import geometry_source
 
     # register operators
     meshing.register()
@@ -143,6 +146,8 @@ def register():
     # register panels
     scene.register()
     objects.register()
+
+    geometry_source.register()
 
 def unregister():
     global objects 
@@ -152,6 +157,7 @@ def unregister():
     # unregister panels
     objects.unregister()
     scene.unregister()
+    geometry_source.unregister()
 
     # unregister operators
     meshing.unregister()

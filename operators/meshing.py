@@ -678,7 +678,9 @@ def objects_from_scene(FDTD, CSX, context):
             o.select_set(True)
 
             unit = context.scene.intuitionRF_unit
-            bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+            # fix for blender 4.2
+            #bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+            bpy.ops.wm.stl_export(filepath=filename, ascii_format=True, export_selected_objects=True)
 
             # immediately reimport mesh as a CSX metal part
             metal = CSX.AddMetal(o.name)
@@ -727,7 +729,8 @@ def objects_from_scene(FDTD, CSX, context):
             filename = f"{context.scene.intuitionRF_simdir}/{o.name}.stl"
             bpy.ops.object.select_all(action='DESELECT')
             o.select_set(True)
-            bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+            #bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+            bpy.ops.wm.stl_export(filepath=filename, ascii_format=True, export_selected_objects=True)
 
             # immediately reimport mesh as a CSX metal part
             if o.intuitionRF_properties.material_use_kappa:
@@ -852,7 +855,8 @@ def material_from_geometry_nodes(evaluated_obj, context, FDTD, CSX):
         bpy.ops.object.select_all(action='DESELECT')
         obj.select_set(True)
 
-        bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+        #bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+        bpy.ops.wm.stl_export(filepath=filename, ascii_format=True, export_selected_objects=True)
 
         if use_kappa:
             material = CSX.AddMaterial(
@@ -917,7 +921,8 @@ def pec_volume_from_geometry_nodes(evaluated_obj, context, FDTD, CSX):
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
 
-    bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+    #bpy.ops.export_mesh.stl(filepath=filename, ascii=True, use_selection=True)
+    bpy.ops.wm.stl_export(filepath=filename, ascii_format=True, export_selected_objects=True)
 
     # immediately reimport mesh as a CSX metal part
     metal = CSX.AddMetal(f"{evaluated_obj.name}.pec_volume")

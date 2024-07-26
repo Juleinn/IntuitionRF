@@ -49,8 +49,6 @@ def extract_lines_xyz(lines):
         if verts[edge.vertices[0]].co[2] != verts[edge.vertices[1]].co[2]:
             z.add(verts[edge.vertices[0]].co[2])
             z.add(verts[edge.vertices[1]].co[2])            
-            print(verts[edge.vertices[0]].co[2])
-            print(verts[edge.vertices[1]].co[2])            
         
     return (x, y, z)
 
@@ -64,7 +62,6 @@ def add_meshline(context, direction):
     
     bm = bmesh.new()
     bm.from_mesh(context.scene.intuitionRF_lines.data)
-    print(bm.edges)
     
     # switch to the lines object
     for vert in source_selected_verts:
@@ -77,7 +74,6 @@ def add_meshline(context, direction):
                 # exclude out of bounds hit
                 if (v2.co - v1.co).length_squared > (intersection - v1.co).length_squared and \
                     (v2.co - v1.co).length_squared > (intersection - v2.co).length_squared:
-                    print("Found unique intersection")
                     # add intersection as new vertex
                     new_vertex = bm.verts.new(intersection)
                     bm.verts.index_update()
@@ -279,7 +275,6 @@ class IntuitionRF_OT_run_sim(bpy.types.Operator):
         global nf2ff
         FDTD = openEMS(NrTS=1e6, EndCriteria=1e-4)
         if context.scene.intuitionRF_oversampling > 1:
-            print('------------------------------------------ set oversampling !!!')
             FDTD.SetOverSampling(context.scene.intuitionRF_oversampling)
 
         CSX = CSXCAD.ContinuousStructure()
@@ -399,7 +394,6 @@ class IntuitionRF_OT_check_updates(bpy.types.Operator):
 
     def execute(self, context):
         current_version = sys.modules.get('IntuitionRF').bl_info['version']
-        print(f"{current_version=}")
 
         import requests
         import json
@@ -410,7 +404,6 @@ class IntuitionRF_OT_check_updates(bpy.types.Operator):
             return {"FINISHED"}
 
         latest_tagname = json.loads(r.content)['tag_name']
-        print(latest_tagname)
 
         latest_major = int(latest_tagname[0])
         latest_minor = int(latest_tagname[2])
@@ -598,8 +591,6 @@ def extract_lines_from_vtp(filename):
     return point_coords, line_connectivity
 
 def start_stop_from_BB(bound_box):
-    for vert in bound_box:
-        print(vert)
     min_x = min(round(vert[0], 5) for vert in bound_box)
     min_y = min(round(vert[1], 5) for vert in bound_box)
     min_z = min(round(vert[2], 5) for vert in bound_box)
@@ -661,9 +652,6 @@ def objects_from_scene(FDTD, CSX, context):
                        round(i[2], 5)] for i in local_verts]
                 normal, elevation, points = get_axis(co)
                 if normal != "None":
-                    print(points)
-                    print(normal)
-                    print(elevation)
                     metal = CSX.AddMetal(f"{o.name}_{index}")
                     prim = metal.AddPolygon(points, normal, elevation)
                     prim.SetPriority(10)
@@ -696,7 +684,6 @@ def objects_from_scene(FDTD, CSX, context):
             reader.SetPrimitiveUsed(True)
 
         if o.intuitionRF_properties.object_type == "metal_edges":
-            print("Found metal edges")
             edges = o.data.edges
             vertices = o.data.vertices
 
@@ -711,7 +698,6 @@ def objects_from_scene(FDTD, CSX, context):
                 metal.AddCurve(coords.T)
 
         if o.intuitionRF_properties.object_type == "dumpbox":
-            print("Found dumpbox")
             start, stop = start_stop_from_BB(o.bound_box)
             # TODO make this cacheable
              
@@ -757,7 +743,6 @@ def objects_from_scene(FDTD, CSX, context):
         # might night to change name later to account for making modifiers used in the setup
         # (not currently the case)
         if o.intuitionRF_properties.object_type == "geometry_node":
-            print("Found attribute geometry node")
             depsgraph = context.evaluated_depsgraph_get()
             evaluated_obj = o.evaluated_get(depsgraph)
 
@@ -765,25 +750,19 @@ def objects_from_scene(FDTD, CSX, context):
             attributes = evaluated_obj.data.attributes
 
             for attribute in attributes:
-                print(attribute.name)
                 if attribute.name == "intuitionrf.port_index":
-                    print("Found attribute port index")
                     ports_from_geometry_nodes(evaluated_obj, FDTD, CSX)
 
                 if attribute.name == "intuitionrf.pec_edge":
-                    print("Found attribute PEC edge")
                     pec_edges_from_geometry_nodes(evaluated_obj, FDTD, CSX)
 
                 if attribute.name == "intuitionrf.pec_aa_face":
-                    print("Found attribute pec aa face")
                     pec_aa_faces_from_geometry_nodes(evaluated_obj, FDTD, CSX)
 
                 if attribute.name == "intuitionrf.pec_volume":
-                    print("Found attribute pec volume")
                     pec_volume_from_geometry_nodes(evaluated_obj, context, FDTD, CSX)
 
                 if attribute.name == "intuitionrf.epsilonr":
-                    print("Found a material")
                     material_from_geometry_nodes(evaluated_obj, context, FDTD, CSX)
 
     # needed to add ports after every other element
@@ -820,8 +799,6 @@ def material_from_geometry_nodes(evaluated_obj, context, FDTD, CSX):
         # we will have a tuple as the key here because we don't want to nest the 
         # dictionnary output
         materials[(item[1].value, item[2].value, item[3].value)].append(item[0])
-
-    print(f"found {len(materials.keys())} different material er/kappa combinations")
 
     # now for each material we found we export the STL
     # and reimport it into OpenEMS immediately
@@ -958,9 +935,6 @@ def pec_aa_faces_from_geometry_nodes(evaluated_obj, FDTD, CSX):
         normal, elevation, points = get_axis(co)
 
         if normal != "None":
-            print(points)
-            print(normal)
-            print(elevation)
             metal = CSX.AddMetal(f"{evaluated_obj.name}.pec_aa_face.{index}")
             prim = metal.AddPolygon(points, normal, elevation)
             prim.SetPriority(10)
@@ -1042,8 +1016,6 @@ def ports_from_geometry_nodes(evaluated_obj, FDTD, CSX):
         impedance = np.mean(value[:,3])
         active = float(np.mean(value[:,7]) > 0)
 
-        print(f"port {key} ({min_x},{min_y},{min_z}),({max_x, max_y, max_z}) has axis {axis}, impedance {impedance}, active : {active}")
-
         port = FDTD.AddLumpedPort(key, impedance, 
             [min_x, min_y, min_z], [max_x, max_y, max_z], axis, active)
 
@@ -1053,10 +1025,6 @@ def ports_from_geometry_nodes(evaluated_obj, FDTD, CSX):
 def meshlines_from_scene(CSX, context):
     lines = context.scene.intuitionRF_lines
     x, y, z = extract_lines_xyz(lines)
-    print("extracted lines")
-    print(x)
-    print(y)
-    print(z)
     
     mesh = CSX.GetGrid()
     unit = context.scene.intuitionRF_unit
@@ -1117,21 +1085,15 @@ def meshlines_from_vertex_groups(CSX, context):
         dg = context.evaluated_depsgraph_get()
         evaluated_object = o.evaluated_get(dg)
         attr_anchors = [attr for attr in evaluated_object.data.attributes if attr.name == "intuitionrf.anchor"]
-        print(attr_anchors)
         if len(attr_anchors) == 1:
             attr_anchors = attr_anchors[0]
             for i, v in enumerate(evaluated_object.data.vertices):
                 if attr_anchors.data[i].value == True:
-                    print("Found anchor")
-                    print(v.co)
 
                     x.add(round(v.co[0], 5)) 
                     y.add(round(v.co[1], 5))
                     z.add(round(v.co[2], 5))
 
-    print(x)
-    print(y)
-    print(z)
     mesh = CSX.GetGrid()
     # put lines in CSXCAD        
     if len(list(x)) > 0:
@@ -1165,14 +1127,8 @@ class IntuitionRF_OT_add_preview_lines(bpy.types.Operator):
         x = mesh.GetLines('x')
         y = mesh.GetLines('y')
         z = mesh.GetLines('z')
-        # print(f"x = {x}")
-        # print(f"y = {y}")
-        # print(f"z = {z}")
 
         unit = context.scene.intuitionRF_unit
-        print(len(x))
-        print(len(y))
-        print(len(z))
 
         # create a new mesh
         mesh = bpy.data.meshes.new("preview_lines")  # add a new mesh

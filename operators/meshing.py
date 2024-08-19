@@ -272,37 +272,41 @@ class IntuitionRF_OT_run_sim(bpy.types.Operator):
     bl_label = "Run SIM"
 
     def execute(self, context):
-        global nf2ff
-        FDTD = openEMS(NrTS=1e6, EndCriteria=1e-4)
-        if context.scene.intuitionRF_oversampling > 1:
-            FDTD.SetOverSampling(context.scene.intuitionRF_oversampling)
-
-        CSX = CSXCAD.ContinuousStructure()
-        CSX = meshlines_from_scene(CSX, context)
-        FDTD.SetCSX(CSX)
-        if context.scene.intuitionRF_excitation_type == "gauss":
-            FDTD.SetGaussExcite( context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
-        elif context.scene.intuitionRF_excitation_type == "custom":
-            FDTD.SetCustomExcite( context.scene.intuitionRF_excitation_custom_function, context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
-        else:
-            FDTD.SetSinusExcite( context.scene.center_freq * 1e6)
-
-        FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'MUR'] )
-
-        FDTD, CSX = objects_from_scene(FDTD, CSX, context)
-
-        mesh = CSX.GetGrid()
-        mesh_res = context.scene.intuitionRF_smooth_max_res
-        mesh.SmoothMeshLines('all', mesh_res, 1.4)
-
-        # Add the nf2ff recording box
-        nf2ff = FDTD.CreateNF2FFBox()
-
-        FDTD.Run(sim_path=context.scene.intuitionRF_simdir, cleanup=False)
-
-        update_port_list(ports)
-        
+        run_sim(context)
         return {"FINISHED"}
+
+def run_sim(context):
+    global nf2ff
+    FDTD = openEMS(NrTS=1e6, EndCriteria=1e-4)
+    if context.scene.intuitionRF_oversampling > 1:
+        FDTD.SetOverSampling(context.scene.intuitionRF_oversampling)
+
+    CSX = CSXCAD.ContinuousStructure()
+    CSX = meshlines_from_scene(CSX, context)
+    FDTD.SetCSX(CSX)
+    if context.scene.intuitionRF_excitation_type == "gauss":
+        FDTD.SetGaussExcite( context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
+    elif context.scene.intuitionRF_excitation_type == "custom":
+        FDTD.SetCustomExcite( context.scene.intuitionRF_excitation_custom_function, context.scene.center_freq * 1e6, context.scene.cutoff_freq * 1e6)
+    else:
+        FDTD.SetSinusExcite( context.scene.center_freq * 1e6)
+
+    FDTD.SetBoundaryCond( ['MUR', 'MUR', 'MUR', 'MUR', 'MUR', 'MUR'] )
+
+    FDTD, CSX = objects_from_scene(FDTD, CSX, context)
+
+    mesh = CSX.GetGrid()
+    mesh_res = context.scene.intuitionRF_smooth_max_res
+    mesh.SmoothMeshLines('all', mesh_res, 1.4)
+
+    # Add the nf2ff recording box
+    nf2ff = FDTD.CreateNF2FFBox()
+
+    FDTD.Run(sim_path=context.scene.intuitionRF_simdir, cleanup=False)
+
+    update_port_list(ports)
+
+    return (FDTD, CSX, nf2ff, ports)
 
 class IntuitionRF_OT_compute_NF2FF(bpy.types.Operator):
     """Compute the near field to far field at resonnant frequency"""
@@ -347,7 +351,7 @@ class IntuitionRF_OT_compute_NF2FF(bpy.types.Operator):
         #
         # create a new mesh
         mesh = bpy.data.meshes.new("rad_pattern")  # add a new mesh
-        rad_pat = bpy.data.objects.new("radiation_pattern", mesh)  # add a new object using the mesh
+        rad_pat = bpy.data.objects.new(f"radiation_pattern_peak_{nf2ff_res.Dmax[0]:.2f}_dBi", mesh)  # add a new object using the mesh
         bpy.context.collection.objects.link(rad_pat)
         
         # draw lines in each directions         
@@ -471,33 +475,38 @@ class IntuitionRF_OT_plot_impedance(IntuitionRF_impedance_plotter):
 
         return {"FINISHED"}
 
+
+def calc_port(port, context):
+    f0 = context.scene.center_freq * 1e6 
+    fc = context.scene.cutoff_freq * 1e6
+    f = np.linspace(f0-fc,f0+fc,601)
+    port.CalcPort(context.scene.intuitionRF_simdir, f)
+
+    Zin = port.uf_tot / port.if_tot
+    s11 = port.uf_ref/port.uf_inc
+    s11_dB = 20.0*np.log10(np.abs(s11))
+    return f, s11_dB
+
 class IntuitionRF_returnloss_plotter(bpy.types.Operator):
     """Baseclass for running the s11 plots from the object 
     and scene panels contexts"""
 
     def plot_s11(self, port, context):
-        f0 = context.scene.center_freq * 1e6 
-        fc = context.scene.cutoff_freq * 1e6
-        f = np.linspace(f0-fc,f0+fc,601)
         try:
-            port.CalcPort(context.scene.intuitionRF_simdir, f)
+            f, s11_dB = calc_port(port, context)
+            plt.plot(f/1e6, s11_dB)
+            plt.ylabel('s11 (dB)')
+            plt.xlabel('f (MHz)')
+            plt.grid()
+            plt.show()
+
+            # put resonnant frequency to the scene res. freq 
+            # multiple port not handled yet
+            res_freq = f[np.argmin(s11_dB)] / 1e6
+            context.scene.intuitionRF_resonnant_freq = res_freq
         except:
             self.report({'INFO'}, "Failed to calc port")
 
-        Zin = port.uf_tot / port.if_tot
-        s11 = port.uf_ref/port.uf_inc
-        s11_dB = 20.0*np.log10(np.abs(s11))
-
-        plt.plot(f/1e6, s11_dB)
-        plt.ylabel('s11 (dB)')
-        plt.xlabel('f (MHz)')
-        plt.grid()
-        plt.show()
-
-        # put resonnant frequency to the scene res. freq 
-        # multiple port not handled yet
-        res_freq = f[np.argmin(s11_dB)] / 1e6
-        context.scene.intuitionRF_resonnant_freq = res_freq
 
 class IntuitionRF_OT_plot_port_return_loss(IntuitionRF_returnloss_plotter):
     """Run the currently defined simulation in OpenEMS"""

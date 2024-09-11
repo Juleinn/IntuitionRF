@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import math
 import glob
 from collections import defaultdict
+from . import convert
+import multiprocessing
 
 # workaround a bug in vtk/or python interpreter bundled with blender 
 from unittest.mock import MagicMock
@@ -507,6 +509,107 @@ class IntuitionRF_returnloss_plotter(bpy.types.Operator):
         except:
             self.report({'INFO'}, "Failed to calc port")
 
+class IntuitionRF_OT_convert_volume_single_frame(bpy.types.Operator):
+    """Convert the current frame's vtk dump for selected dump object 
+    to OpenVDB file (if frame in available files range, ordered by name)"""
+    bl_idname = "intuitionrf.convert_volume_single_frame"
+    bl_label = "Convert Current Frame"
+
+    def execute(self, context):
+        # find all vtk files in simdir for current dump box (could be 0 if sim never ran)
+        simdir = context.scene.intuitionRF_simdir
+        object_name = context.active_object.name
+
+        files = sorted(glob.glob(f"{os.path.join(simdir, object_name)}*vtr"))
+        frame_relative = context.scene.frame_current - context.scene.frame_start
+        if frame_relative >= len(files):
+            self.report({"ERROR"}, "Current frame is out of existing computed dump files bounds")
+            return {"FINISHED"}
+
+        # find the appropriate file 
+        file_vtr = files[frame_relative]
+        file_vdb = file_vtr.replace(".vtr", ".vdb") # this will cause bug if the object has .vtr as part of name 
+        self.report({"INFO"}, f"Computing OpenVDB for file {file_vtr}")
+
+        dicing_factor = context.active_object.intuitionRF_properties.dicing_factor
+        
+        scale_factor, offset = convert.vtr_to_vdb(file_vtr, file_vdb, dicing_factor)
+
+        # scaling here doesnt seem to work
+        bpy.ops.object.volume_import(
+            filepath=file_vdb, 
+            directory=os.path.dirname(file_vdb), 
+            files=[{"name":os.path.basename(file_vdb)}], 
+            relative_path=True, 
+            align='WORLD', 
+            location=(0, 0, 0), 
+            scale=(1,1,1)
+        )
+
+        bpy.ops.transform.resize(value=(1/scale_factor, 1/scale_factor, 1/scale_factor))
+        bpy.ops.transform.translate(value=offset)
+
+        return {"FINISHED"}
+
+def thread_func(args):
+    file_split, basename, dicing_factor = args
+    scale_factor = 1
+    offset = (0,0,0)
+    for local_index, (index, file_vtr) in enumerate(file_split):
+        print(file_vtr)
+        file_vdb = f"{basename}_{int(index):06d}.vdb"
+        scale_factor, offset = convert.vtr_to_vdb(file_vtr, os.path.join(os.path.dirname(file_vtr), file_vdb), dicing_factor)
+        print(f"processed {int((local_index+1)/len(file_split)*100)}% of thread split")
+
+    return scale_factor, offset
+
+class IntuitionRF_OT_convert_volume_all_frames(bpy.types.Operator):
+    """Convert all frames' vtk dump for selected dump object 
+    to OpenVDB files (for all frames available in file range, ordered by name)"""
+    bl_idname = "intuitionrf.convert_volume_all_frames"
+    bl_label = "Convert all Frames"
+
+    def execute(self, context):
+        simdir = context.scene.intuitionRF_simdir
+        object_name = context.active_object.name
+        thread_count = context.active_object.intuitionRF_properties.thread_count
+        queue = multiprocessing.Queue()
+
+        files = sorted(glob.glob(f"{os.path.join(simdir, object_name)}*vtr"))
+        files_splits = np.array_split(np.array(list(enumerate(files))), thread_count)
+
+        dicing_factor = context.active_object.intuitionRF_properties.dicing_factor
+
+        args = list(zip(files_splits, [object_name] * len(files_splits), [dicing_factor] * len(files_splits)))
+
+        with multiprocessing.Pool(processes=thread_count) as pool:
+            results = pool.map(thread_func, args)
+
+        scale_factor, offset = results[0] # should all be the same
+        print(scale_factor)
+        print(offset)
+
+        files = sorted(glob.glob(f"{os.path.join(simdir, object_name)}*vdb"))
+        files_vdb = []
+        for file in files:
+            file_vdb = os.path.basename(file)
+            files_vdb.append({"name":file_vdb})
+
+        print(files_vdb)
+        file0 = files[0]
+
+        bpy.ops.object.volume_import(filepath=file0,
+                                     directory=os.path.dirname(file0), 
+                                     files=files_vdb,
+                                     relative_path=False, 
+                                     align='WORLD', 
+                                     location=(0, 0, 0), 
+                                     scale=(1, 1, 1))
+
+        bpy.ops.transform.resize(value=(1/scale_factor, 1/scale_factor, 1/scale_factor))
+        bpy.ops.transform.translate(value=offset)
+
+        return {"FINISHED"}
 
 class IntuitionRF_OT_plot_port_return_loss(IntuitionRF_returnloss_plotter):
     """Run the currently defined simulation in OpenEMS"""
@@ -1202,6 +1305,9 @@ def register():
     bpy.utils.register_class(IntuitionRF_OT_plot_impedance)
     bpy.utils.register_class(IntuitionRF_OT_compute_NF2FF)
     bpy.utils.register_class(IntuitionRF_OT_check_updates)
+
+    bpy.utils.register_class(IntuitionRF_OT_convert_volume_single_frame)
+    bpy.utils.register_class(IntuitionRF_OT_convert_volume_all_frames)
 
 def unregister():
     bpy.utils.unregister_class(IntuitionRF_OT_add_meshline_x)

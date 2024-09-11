@@ -7,6 +7,7 @@ from mathutils import geometry
 from CSXCAD import CSXCAD
 from openEMS import openEMS, ports
 from openEMS.physical_constants import *
+import multiprocessing
 
 import os
 sys.path.append(os.path.abspath('..'))
@@ -76,6 +77,21 @@ class IntuitionRF_ObjectProperties(bpy.types.PropertyGroup):
         ]
     )
 
+    dicing_factor: bpy.props.IntProperty(
+        name = 'Dicing factor',
+        description = 'Dicing factor as a multiple of the computed cell size (smallest irregular grid cell size)',
+        default = 8,
+    )
+
+    use_log: bpy.props.BoolProperty(name = 'use_log', default=True)
+
+    thread_count: bpy.props.IntProperty(
+        name = 'thread count',
+        description = 'Number of thread for multi-frame compute',
+        default = multiprocessing.cpu_count() - 1,
+    )
+
+
 # object tab properties panel
 class OBJECT_PT_intuitionRFPanel(bpy.types.Panel):
     bl_label = "IntuitionRF"
@@ -122,9 +138,20 @@ class OBJECT_PT_intuitionRFPanel(bpy.types.Panel):
             row.prop(obj.intuitionRF_properties, "dump_type")
             row = layout.row()
             row.prop(obj.intuitionRF_properties, "dump_mode")
-
-
-
+            row = layout.row()
+            box = row.box()
+            row = box.row()
+            row.label(text="Convert to Blender volume")
+            row = box.row()
+            row.prop(obj.intuitionRF_properties, "dicing_factor")
+            row = box.row()
+            row.operator("intuitionrf.convert_volume_single_frame")
+            row = box.row()
+            row = box.row()
+            row.prop(obj.intuitionRF_properties, "thread_count")
+            row = box.row()
+            row.operator("intuitionrf.convert_volume_all_frames")
+            
 def register():
     # register object classes
     bpy.utils.register_class(OBJECT_PT_intuitionRFPanel)

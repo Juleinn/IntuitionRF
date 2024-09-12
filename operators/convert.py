@@ -2,7 +2,6 @@ import sys
 # workaround a bug in vtk/or python interpreter bundled with blender 
 from unittest.mock import MagicMock
 
-from ..panels.scene import update_port_list
 sys.modules['vtkmodules.vtkRenderingMatplotlib'] = MagicMock()
 import vtk
 from vtk.util.numpy_support import vtk_to_numpy
@@ -14,6 +13,8 @@ from scipy.ndimage import convolve, gaussian_filter
 import glob
 import threading
 import time 
+import multiprocessing
+import os
 
 def vtr_to_vdb(vtr_file, vdb_file, dicing_factor=8):
     # read input data
@@ -220,3 +221,21 @@ def vtr_to_vdb(vtr_file, vdb_file, dicing_factor=8):
     vdb.write(vdb_file, grids=[vdb_grid, sobel_grid, sobel_grid_x, sobel_grid_y, sobel_grid_z])
 
     return scale_factor, (offset_x, offset_y, offset_z)
+
+def thread_func(args):
+    file_split, basename, dicing_factor = args
+    scale_factor = 1
+    offset = (0,0,0)
+    for local_index, (index, file_vtr) in enumerate(file_split):
+        print(file_vtr)
+        file_vdb = f"{basename}_{int(index):06d}.vdb"
+        scale_factor, offset = vtr_to_vdb(file_vtr, os.path.join(os.path.dirname(file_vtr), file_vdb), dicing_factor)
+        print(f"processed {int((local_index+1)/len(file_split)*100)}% of thread split")
+
+    return scale_factor, offset
+
+def run_parrallel(args, thread_count):
+    with multiprocessing.Pool(processes=thread_count) as pool:
+        results = pool.map(thread_func, args)
+
+        return results

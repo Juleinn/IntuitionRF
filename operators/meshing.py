@@ -10,6 +10,7 @@ import math
 import glob
 from collections import defaultdict
 from . import convert
+from .convert import run_parrallel
 import multiprocessing
 
 # workaround a bug in vtk/or python interpreter bundled with blender 
@@ -551,17 +552,6 @@ class IntuitionRF_OT_convert_volume_single_frame(bpy.types.Operator):
 
         return {"FINISHED"}
 
-def thread_func(args):
-    file_split, basename, dicing_factor = args
-    scale_factor = 1
-    offset = (0,0,0)
-    for local_index, (index, file_vtr) in enumerate(file_split):
-        print(file_vtr)
-        file_vdb = f"{basename}_{int(index):06d}.vdb"
-        scale_factor, offset = convert.vtr_to_vdb(file_vtr, os.path.join(os.path.dirname(file_vtr), file_vdb), dicing_factor)
-        print(f"processed {int((local_index+1)/len(file_split)*100)}% of thread split")
-
-    return scale_factor, offset
 
 class IntuitionRF_OT_convert_volume_all_frames(bpy.types.Operator):
     """Convert all frames' vtk dump for selected dump object 
@@ -573,7 +563,6 @@ class IntuitionRF_OT_convert_volume_all_frames(bpy.types.Operator):
         simdir = context.scene.intuitionRF_simdir
         object_name = context.active_object.name
         thread_count = context.active_object.intuitionRF_properties.thread_count
-        queue = multiprocessing.Queue()
 
         files = sorted(glob.glob(f"{os.path.join(simdir, object_name)}*vtr"))
         files_splits = np.array_split(np.array(list(enumerate(files))), thread_count)
@@ -582,8 +571,7 @@ class IntuitionRF_OT_convert_volume_all_frames(bpy.types.Operator):
 
         args = list(zip(files_splits, [object_name] * len(files_splits), [dicing_factor] * len(files_splits)))
 
-        with multiprocessing.Pool(processes=thread_count) as pool:
-            results = pool.map(thread_func, args)
+        results = run_parrallel(args, thread_count)
 
         scale_factor, offset = results[0] # should all be the same
         print(scale_factor)

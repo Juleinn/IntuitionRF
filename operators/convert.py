@@ -7,7 +7,7 @@ import vtk
 from vtk.util.numpy_support import vtk_to_numpy
 import numpy as np
 import scipy
-import pyopenvdb as vdb
+import openvdb as vdb
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import convolve, gaussian_filter
 import glob
